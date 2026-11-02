@@ -1,0 +1,20 @@
+{
+  "name": "corujinha",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Faturas de cartão do casal num só lugar, com divisão transparente das contas de casa.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:core": "npm run build -w @corujinha/core",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:api": "npm run dev -w @corujinha/api",
+    "dev:mobile": "npm run start -w @corujinha/mobile"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
