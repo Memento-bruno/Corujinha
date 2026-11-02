@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createApi, type Api } from "./api";
+import { createDemoApi, DEMO } from "./demo";
 import { clearSession, loadSession, saveSession, type StoredSession } from "./secure";
 
 interface SessionCtx {
@@ -26,7 +27,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     () => ({
       ready,
       session,
-      api: session ? createApi(session.token) : null,
+      api: session ? (DEMO ? createDemoApi(session.userId) : createApi(session.token)) : null,
       signIn: async (s) => {
         await saveSession(s);
         setSession(s);

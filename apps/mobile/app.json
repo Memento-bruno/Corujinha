@@ -10,7 +10,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.corujinha",
-      "config": { "usesNonExemptEncryption": false }
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "app.corujinha",
@@ -23,11 +25,18 @@
       }
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "asyncRoutes": false
+        }
+      ],
       "expo-secure-store",
       [
         "expo-local-authentication",
-        { "faceIDPermission": "Usamos o Face ID para proteger as faturas do casal." }
+        {
+          "faceIDPermission": "Usamos o Face ID para proteger as faturas do casal."
+        }
       ],
       [
         "expo-splash-screen",
@@ -38,6 +47,13 @@
         }
       ]
     ],
-    "experiments": { "typedRoutes": true }
+    "experiments": {
+      "typedRoutes": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    }
   }
 }

@@ -1,11 +1,13 @@
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { Card, Money, Screen, colors, text } from "@/components/ui";
-import { previousMonth } from "@/lib/api";
-import { useApi } from "@/lib/session";
+import { monthLabel, previousMonth } from "@/lib/api";
+import { DEMO } from "@/lib/demo";
+import { useApi, useSession } from "@/lib/session";
 import { useLoad } from "@/lib/useLoad";
 
 export default function Mes() {
   const api = useApi();
+  const { session } = useSession();
   const month = previousMonth();
   const { data, error, loading, reload } = useLoad(async () => {
     const [s, h] = await Promise.all([api.settlement(month), api.household()]);
@@ -18,7 +20,13 @@ export default function Mes() {
         contentContainerStyle={{ padding: 16, gap: 12 }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
       >
-        <Text style={text.h1}>Fechamento de {month}</Text>
+        <Text style={text.h1}>Fechamento de {monthLabel(month)}</Text>
+        {data && (
+          <Text style={text.muted}>
+            Você está como {data.names[session!.userId]}
+            {DEMO ? " · versão de teste com dados fictícios" : ""}
+          </Text>
+        )}
         {error && <Text style={{ color: colors.negative }}>{error}</Text>}
         {data && (
           <>

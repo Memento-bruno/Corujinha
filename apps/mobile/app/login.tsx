@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 import { Button, colors, text } from "@/components/ui";
+import { DEMO, DEMO_PEOPLE, resetDemo } from "@/lib/demo";
 import { useSession } from "@/lib/session";
 
 /**
@@ -12,6 +13,26 @@ export default function Login() {
   const { signIn } = useSession();
   const [devToken, setDevToken] = useState("");
   const [userId, setUserId] = useState("");
+
+  if (DEMO) {
+    return (
+      <View style={styles.box}>
+        <Text style={styles.owl}>🦉</Text>
+        <Text style={[text.h1, { textAlign: "center" }]}>Corujinha</Text>
+        <Text style={[text.muted, { textAlign: "center" }]}>
+          Versão de teste com dados fictícios. Nada aqui fala com banco de verdade.
+        </Text>
+        {DEMO_PEOPLE.map((p) => (
+          <Button
+            key={p.id}
+            title={`Entrar como ${p.name}`}
+            onPress={() => signIn({ token: "demo", userId: p.id })}
+          />
+        ))}
+        <Button title="Restaurar dados de exemplo" variant="secondary" onPress={resetDemo} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.box}>

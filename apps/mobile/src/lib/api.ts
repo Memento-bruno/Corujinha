@@ -66,6 +66,14 @@ export function createApi(token: string) {
 
 export type Api = ReturnType<typeof createApi>;
 
+const MONTHS = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+
+/** "2026-10" => "outubro de 2026". */
+export function monthLabel(month: string): string {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  return `${MONTHS[m - 1]} de ${y}`;
+}
+
 /** Mês anterior no formato AAAA-MM (a fatura que fecha agora). */
 export function previousMonth(d = new Date()): string {
   const x = new Date(d.getFullYear(), d.getMonth() - 1, 1);

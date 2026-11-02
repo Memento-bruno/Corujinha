@@ -1,4 +1,9 @@
 import * as SecureStore from "expo-secure-store";
+import { Platform } from "react-native";
+
+// No navegador (versão de teste) não há Keychain: guardamos só em memória.
+const isWeb = Platform.OS === "web";
+let webMemory: string | null = null;
 
 /**
  * Tokens ficam no Keychain (iOS) / Keystore (Android), nunca em AsyncStorage.
@@ -16,14 +21,16 @@ export interface StoredSession {
 }
 
 export async function loadSession(): Promise<StoredSession | null> {
-  const raw = await SecureStore.getItemAsync(KEY, opts);
+  const raw = isWeb ? webMemory : await SecureStore.getItemAsync(KEY, opts);
   return raw ? (JSON.parse(raw) as StoredSession) : null;
 }
 
 export async function saveSession(s: StoredSession) {
-  await SecureStore.setItemAsync(KEY, JSON.stringify(s), opts);
+  if (isWeb) webMemory = JSON.stringify(s);
+  else await SecureStore.setItemAsync(KEY, JSON.stringify(s), opts);
 }
 
 export async function clearSession() {
-  await SecureStore.deleteItemAsync(KEY, opts);
+  if (isWeb) webMemory = null;
+  else await SecureStore.deleteItemAsync(KEY, opts);
 }

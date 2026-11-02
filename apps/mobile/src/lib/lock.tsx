@@ -1,6 +1,6 @@
 import * as LocalAuthentication from "expo-local-authentication";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { AppState, StyleSheet, Text, View } from "react-native";
+import { AppState, Platform, StyleSheet, Text, View } from "react-native";
 import { Button } from "@/components/ui";
 
 /** Tempo em segundo plano após o qual o app pede biometria de novo. */
@@ -12,6 +12,12 @@ const RELOCK_AFTER_MS = 60_000;
  * (o que também esconde o conteúdo no seletor de apps).
  */
 export function BiometricLock({ children }: { children: ReactNode }) {
+  // Navegador não tem biometria do aparelho: a versão web é só para teste.
+  if (Platform.OS === "web") return <>{children}</>;
+  return <NativeLock>{children}</NativeLock>;
+}
+
+function NativeLock({ children }: { children: ReactNode }) {
   const [unlocked, setUnlocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const backgroundedAt = useRef<number | null>(null);

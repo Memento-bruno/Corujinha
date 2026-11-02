@@ -1,7 +1,8 @@
 import { parseBRL } from "@corujinha/core";
 import { useState } from "react";
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Button, Card, Chip, Money, Screen, colors, text } from "@/components/ui";
+import { notify } from "@/lib/notify";
 import { useApi } from "@/lib/session";
 import { useLoad } from "@/lib/useLoad";
 
@@ -23,7 +24,7 @@ export default function Contas() {
     const day = Number(dueDay);
     const payer = paidBy ?? data?.people[0]?.id;
     if (!description || !cents || cents <= 0 || !payer || !(day >= 1 && day <= 31)) {
-      Alert.alert("Confira os campos", "Descrição, valor, dia (1 a 31) e quem paga.");
+      notify("Confira os campos", "Descrição, valor, dia (1 a 31) e quem paga.");
       return;
     }
     await api.addRecurring({

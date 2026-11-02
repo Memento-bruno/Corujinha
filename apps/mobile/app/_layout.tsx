@@ -1,5 +1,6 @@
 import { Redirect, Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { Toast } from "@/components/Toast";
 import { BiometricLock } from "@/lib/lock";
 import { SessionProvider, useSession } from "@/lib/session";
 
@@ -29,6 +30,7 @@ export default function RootLayout() {
     <SessionProvider>
       <StatusBar style="auto" />
       <Gate />
+      <Toast />
     </SessionProvider>
   );
 }
