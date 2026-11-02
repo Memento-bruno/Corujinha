@@ -1,7 +1,9 @@
 import { formatBRL, parseBRL, type SplitRule } from "@corujinha/core";
 import { useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Button, Card, Chip, Screen, colors, text } from "@/components/ui";
+import { DEMO, resetDemo } from "@/lib/demo";
+import { notify } from "@/lib/notify";
 import { useApi, useSession } from "@/lib/session";
 import { useLoad } from "@/lib/useLoad";
 
@@ -15,7 +17,7 @@ export default function Ajustes() {
 
   async function saveIncome() {
     const cents = parseBRL(income);
-    if (!cents || cents <= 0) return Alert.alert("Valor inválido");
+    if (!cents || cents <= 0) return notify("Valor inválido");
     await api.setIncome(cents);
     setIncome("");
     reload();
@@ -26,7 +28,7 @@ export default function Ajustes() {
       await api.setRule(rule);
       reload();
     } catch (e) {
-      Alert.alert("Não deu para mudar a regra", e instanceof Error ? e.message : String(e));
+      notify("Não deu para mudar a regra", e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -78,7 +80,17 @@ export default function Ajustes() {
           </Text>
         </Card>
 
-        <Button title="Sair" variant="secondary" onPress={signOut} />
+        {DEMO && (
+          <Button
+            title="Restaurar dados de exemplo"
+            variant="secondary"
+            onPress={() => {
+              resetDemo();
+              reload();
+            }}
+          />
+        )}
+        <Button title={DEMO ? "Trocar de pessoa" : "Sair"} variant="secondary" onPress={signOut} />
       </ScrollView>
     </Screen>
   );

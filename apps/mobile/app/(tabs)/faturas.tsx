@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { RefreshControl, ScrollView, Text, View } from "react-native";
 import { Button, Card, Chip, Money, Screen, colors, text } from "@/components/ui";
-import { previousMonth } from "@/lib/api";
+import { monthLabel, previousMonth } from "@/lib/api";
 import { useApi, useSession } from "@/lib/session";
 import { useLoad } from "@/lib/useLoad";
 
@@ -33,7 +33,7 @@ export default function Faturas() {
         contentContainerStyle={{ padding: 16, gap: 12 }}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={reload} />}
       >
-        <Text style={text.h1}>Faturas de {month}</Text>
+        <Text style={text.h1}>Faturas de {monthLabel(month)}</Text>
         <Button title="Conectar / atualizar cartão" variant="secondary" onPress={() => router.push("/conectar")} />
         {error && <Text style={{ color: colors.negative }}>{error}</Text>}
         {data?.bills.length === 0 && (
