@@ -44,6 +44,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-zinc-400">
           <ShieldCheck className="size-3.5" /> Acesso restrito a 2 contas autorizadas
         </p>
+        <a href="/privacidade" className="mt-2 inline-block text-xs text-zinc-400 underline">
+          Política de privacidade
+        </a>
       </div>
     </main>
   );

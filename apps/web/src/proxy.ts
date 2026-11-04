@@ -12,6 +12,7 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
   const isPublic =
     pathname.startsWith("/login") ||
+    pathname === "/privacidade" ||
     pathname.startsWith("/api/auth") ||
     pathname === "/manifest.webmanifest" ||
     pathname === "/sw.js";
