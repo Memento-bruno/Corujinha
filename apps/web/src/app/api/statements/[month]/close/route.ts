@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isMonthKey } from "@/lib/domain/months";
 import { settleMonth, recurringToExpenses } from "@/lib/engines/settlement";
 import { sumCents } from "@/lib/engines/analytics";
+import { withPredicted } from "@/lib/engines/recurring";
 import { getDatabase } from "@/lib/server/database";
 import { BadRequestError, handle } from "@/lib/server/http";
 import { etagSchema } from "@/lib/server/schemas";
@@ -30,7 +31,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ month: string 
       closedAt: new Date().toISOString(),
       closedBy: viewer.userId,
       settlement,
-      totalStatements: sumCents(statement.data.transactions),
+      totalStatements: sumCents(withPredicted(debts, month, statement.data.transactions)),
       totalRecurring: sumCents(recurringToExpenses(debts, month)),
     };
     return db.saveStatement({ ...statement.data, snapshot }, body.etag);

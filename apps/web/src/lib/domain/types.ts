@@ -135,13 +135,18 @@ export interface Transaction {
   externalId?: string;
   /** Conexão Open Finance de onde a compra veio (para apagar ao desconectar). */
   pluggyItemId?: string;
+  /** Só na tela (nunca salvo): compra recorrente prevista que o banco ainda não trouxe. Id da recorrente. */
+  predictedFrom?: string;
 }
 
-export type RecurringKind = "CONTA_FIXA" | "FINANCIAMENTO" | "PARCELAMENTO" | "ASSINATURA";
+export type RecurringKind = "BOLETO" | "CONTA_FIXA" | "FINANCIAMENTO" | "PARCELAMENTO" | "ASSINATURA" | "CARTAO";
 
 /**
- * Dívida/conta recorrente paga FORA das faturas de cartão (boleto, débito, transferência).
- * Se a cobrança cai num cartão, ela já aparece como transação e não deve ser cadastrada aqui.
+ * Conta recorrente (ou avulsa) do casal.
+ * - Tipos fora do cartão (boleto, débito, transferência) entram direto no encontro de contas.
+ * - "CARTAO": compra que se repete todo mês num cartão. Enquanto o banco ainda não trouxe a
+ *   compra do mês, ela aparece como "prevista" na fatura daquele cartão. Quando a compra real
+ *   chega (mesmo cartão + mesmo estabelecimento), a prevista some.
  */
 export interface RecurringDebt {
   id: string;
@@ -154,9 +159,12 @@ export interface RecurringDebt {
   dueDay: number;
   /** Primeiro mês em que a dívida vale. */
   startMonth: MonthKey;
-  /** Para financiamentos/parcelamentos: número total de parcelas. */
+  /** Para financiamentos/parcelamentos: número total de parcelas. 1 = conta avulsa (só um mês). */
   totalInstallments?: number;
   active: boolean;
+  /** Só para "CARTAO": cartão e estabelecimento da compra que se repete. */
+  cardId?: string;
+  merchantKey?: string;
 }
 
 export interface RecurringDebtsFile {
