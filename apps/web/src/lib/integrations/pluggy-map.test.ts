@@ -208,3 +208,19 @@ describe("parcelas previstas", () => {
     expect(out.get("2026-11")!.map((t) => t.externalId).sort()).toEqual(["pluggy:x:p3", "pluggy:y:p3"]);
   });
 });
+
+describe("billPayments", () => {
+  it("marca a fatura como paga, parcial ou em aberto", async () => {
+    const { billPayments } = await import("./pluggy-map");
+    const bills = [
+      { id: "b9", dueDate: "2026-09-10", totalAmount: 1000 },
+      { id: "b10", dueDate: "2026-10-10", totalAmount: 800 },
+      { id: "b11", dueDate: "2026-11-10", totalAmount: 500 },
+    ];
+    const pay = (id: string, date: string, v: number) => tx(id, v, { description: "Pagamento de fatura", date: `${date}T00:00:00Z` });
+    const r = billPayments(bills, [pay("p1", "2026-09-09", -1000), pay("p2", "2026-10-10", -300)]);
+    expect(r.get("b9")!.status).toBe("paga");
+    expect(r.get("b10")).toEqual({ paid: 30000, status: "parcial" });
+    expect(r.get("b11")!.status).toBe("em aberto");
+  });
+});

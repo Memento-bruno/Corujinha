@@ -178,7 +178,15 @@ export interface StatementFile {
   month: MonthKey;
   transactions: Transaction[];
   snapshot?: MonthSnapshot;
+  /** Fatura informada pelo banco (Open Finance), por cartão principal: total, quanto foi pago e situação. */
+  bankBills?: Record<string, BankBill>;
   updatedAt: string;
+}
+
+export interface BankBill {
+  total: Cents;
+  paid: Cents;
+  status: "paga" | "parcial" | "em aberto";
 }
 
 /** Linha que entra no encontro de contas: transação de cartão ou dívida recorrente. */
