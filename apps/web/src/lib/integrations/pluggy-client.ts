@@ -75,20 +75,28 @@ export async function getBills(accountId: string): Promise<PluggyBill[]> {
 }
 
 /** Transações desde `from` (ISO), paginando pelo cursor da API v2. */
+/** Monta o caminho da próxima página a partir do `next` da Pluggy (cursor, "?after=…" ou URL completa). */
+export function nextPagePath(path: string, next: string): string {
+  if (/^https?:\/\//i.test(next)) {
+    const u = new URL(next);
+    return u.pathname + u.search;
+  }
+  if (next.startsWith(path)) return next;
+  if (next.startsWith("?") || next.startsWith("&")) return path + "?" + next.replace(/^[?&]/, "");
+  if (next.startsWith("/")) return path + next;
+  return `${path}?after=${encodeURIComponent(next)}`;
+}
+
 export async function getTransactions(accountId: string, from: string): Promise<PluggyTransaction[]> {
+  const path = "/v2/transactions";
   const all: PluggyTransaction[] = [];
-  let after: string | undefined;
-  for (let page = 0; page < 200; page++) {
-    const r = await get<{ results: PluggyTransaction[]; next?: string | null }>("/v2/transactions", {
-      accountId,
-      dateFrom: from,
-      after,
-    });
+  let r = await get<{ results: PluggyTransaction[]; next?: string | null }>(path, { accountId, dateFrom: from });
+  all.push(...(r.results ?? []));
+  for (let page = 1; page < 200 && r.next; page++) {
+    // A Pluggy pede para anexar o `next` ao caminho (GET /v2/transactions{next}).
+    const nextPath = nextPagePath(path, r.next);
+    r = await get(nextPath, nextPath.includes("accountId=") ? {} : { accountId });
     all.push(...(r.results ?? []));
-    if (!r.next) break;
-    // `next` pode vir como cursor ou como URL completa com ?after=
-    after = r.next.startsWith("http") ? (new URL(r.next).searchParams.get("after") ?? undefined) : decodeURIComponent(r.next);
-    if (!after) break;
   }
   return all;
 }
