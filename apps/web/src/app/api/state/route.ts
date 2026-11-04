@@ -25,7 +25,7 @@ async function openBillMonth(db: Awaited<ReturnType<typeof getDatabase>>): Promi
   return next > now ? next : now;
 }
 
-/** Estado completo para a interface: config, recorrentes e as faturas do mês + 5 anteriores. */
+/** Estado completo para a interface: config, recorrentes e as faturas em volta do mês (12 meses) e da fatura em aberto. */
 export async function GET(req: Request) {
   return handle(async () => {
     const viewer = await requireViewer();
@@ -36,7 +36,9 @@ export async function GET(req: Request) {
     if (requested && !isMonthKey(requested)) throw new BadRequestError("Mês inválido");
     const openMonth = await openBillMonth(db);
     const month = requested ?? openMonth;
-    const months = monthRange(month, 6);
+    // Mês escolhido com 6 anteriores e 5 seguintes (gráficos de evolução e previsão)
+    // + a faixa de 12 meses do topo, que fica fixa em volta da fatura em aberto.
+    const months = [...new Set([...monthRange(addMonths(month, 5), 12), ...monthRange(addMonths(openMonth, 5), 12)])].sort();
     const [config, recurring, ...statements] = await Promise.all([
       db.getConfig(),
       db.getRecurring(),

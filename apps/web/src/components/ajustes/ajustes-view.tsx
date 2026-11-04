@@ -1,6 +1,6 @@
 "use client";
 
-import { CloudCheck, CreditCard as CardIcon, EyeOff, HardDrive, KeyRound, LogOut, Plus, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
+import { CloudCheck, CreditCard as CardIcon, Eye, EyeOff, Wallet, HardDrive, KeyRound, LogOut, Plus, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { useDerived } from "@/lib/client/derived";
 import { api, useStore } from "@/lib/client/store";
@@ -14,6 +14,53 @@ import { Input, Label, Select } from "../ui/field";
 import { IconBox } from "../ui/icon-box";
 import { Sheet } from "../ui/sheet";
 import { OpenFinanceCard } from "./open-finance-card";
+
+/** Renda do casal: cada um coloca o próprio salário líquido. O valor nunca aparece em outra tela, só porcentagens. */
+function IncomeCard({ cfg, me, set }: { cfg: HouseholdConfig; me: UserId; set: (fn: (c: HouseholdConfig) => HouseholdConfig) => void }) {
+  const [text, setText] = useState("");
+  const [show, setShow] = useState(false);
+  const partner: UserId = me === "USER_A" ? "USER_B" : "USER_A";
+  const mine = cfg.incomes?.[me] ?? 0;
+  const save = () => {
+    const c = parseMoneyToCents(text);
+    if (c === null || c < 0) return;
+    set((x) => ({ ...x, incomes: { ...x.incomes, [me]: c } }));
+    setText("");
+    setShow(false);
+  };
+  return (
+    <Card id="renda">
+      <CardHeader icon={<IconBox><Wallet /></IconBox>} title="Renda do casal" subtitle="Só para calcular quanto da renda os gastos usam" />
+      <p className="mb-3 text-xs text-zinc-500">O valor fica escondido e nunca aparece em outras telas, só a porcentagem.</p>
+      <label className="block">
+        <Label>Seu salário líquido ({cfg.users[me].name.split(" ")[0]})</Label>
+        <div className="flex gap-2">
+          <Input
+            type={show ? "text" : "password"}
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder={mine ? "•••••••• (já salvo, digite para trocar)" : "Ex.: 8.500,00"}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+          />
+          <Button variant="outline" size="sm" type="button" onClick={() => setShow(!show)} aria-label={show ? "Esconder o que digitei" : "Mostrar o que digitei"}>
+            {show ? <EyeOff /> : <Eye />}
+          </Button>
+        </div>
+      </label>
+      <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+        <span className="text-zinc-500">
+          {cfg.users[partner].name.split(" ")[0]}: <b className="text-zinc-800">{cfg.incomes?.[partner] ? "já colocou" : "ainda não colocou"}</b>
+        </span>
+        <Button size="sm" type="button" onClick={save} disabled={!text.trim()}>
+          Salvar
+        </Button>
+      </div>
+      <p className="mt-2 text-[11px] text-zinc-500">Cada um só consegue mudar o próprio salário.</p>
+    </Card>
+  );
+}
 
 function MoneyField({ value, onCommit, disabled }: { value: number; onCommit: (c: number) => void; disabled?: boolean }) {
   const [text, setText] = useState(formatBRL(value));
@@ -50,7 +97,7 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
 
   return (
     <div className="space-y-4 pt-1">
-      <h2 className="text-base font-semibold text-zinc-900">Ajustes</h2>
+      <h2 className="text-base font-semibold text-zinc-900">Configurações</h2>
 
       <Card>
         <CardHeader icon={<IconBox>{mode.storage === "drive" ? <CloudCheck /> : <HardDrive />}</IconBox>} title="Armazenamento e segurança" />
@@ -125,6 +172,8 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
           <p className="mt-1 text-[11px] text-zinc-500">Usada em toda compra marcada como “Divisão padrão”. Ex.: 60/40 para dividir proporcional à renda.</p>
         </div>
       </Card>
+
+      <IncomeCard cfg={cfg} me={state!.viewer.userId} set={set} />
 
       <Card>
         <CardHeader title="Meta e tetos por setor" subtitle="Base do medidor de saúde e dos alertas de estouro" />

@@ -90,6 +90,7 @@ export const configSchema = z.object({
     .max(20),
   defaultSplitPercentA: z.number().min(0).max(100),
   monthlyGoal: cents.min(0),
+  incomes: z.partialRecord(userId, cents.min(0)).optional(),
   sectorBudgets: z.partialRecord(category, cents.min(0)),
   savingsRules: z.object({
     movingAverageThresholdPct: z.number().min(0).max(500),

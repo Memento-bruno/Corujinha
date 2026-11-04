@@ -9,7 +9,6 @@ import { monthLabel } from "@/lib/domain/months";
 import type { UserId } from "@/lib/domain/types";
 import { simulateCuts, type SavingsRecommendation, type SavingsRule } from "@/lib/engines/savings";
 import { cn } from "@/lib/utils";
-import { MonthSwitcher } from "../shell/month-switcher";
 import { Button } from "../ui/button";
 import { Card, CardHeader } from "../ui/card";
 import { Checkbox } from "../ui/checkbox";
@@ -36,8 +35,7 @@ export function CortesView() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between pt-1">
-        <h2 className="text-base font-semibold text-zinc-900">Sugestões de corte</h2>
-        <MonthSwitcher />
+        <h2 className="text-base font-semibold text-zinc-900">Metas e sugestões de corte</h2>
       </div>
       <Card className="relative overflow-hidden">
         <div className="pointer-events-none absolute -top-10 -right-10 size-40 rounded-full bg-gradient-to-br from-brand-100 to-emerald-100 opacity-70 blur-2xl" />

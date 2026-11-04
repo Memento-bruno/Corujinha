@@ -84,6 +84,11 @@ export interface HouseholdConfig {
   defaultSplitPercentA: number;
   /** Meta mensal de gastos do casal (centavos). Base do medidor de saúde. */
   monthlyGoal: Cents;
+  /**
+   * Salário líquido de cada um (centavos). Só serve para calcular quanto da renda os gastos usam:
+   * a interface nunca mostra esses valores, só porcentagens.
+   */
+  incomes?: Partial<Record<UserId, Cents>>;
   /** Tetos de gasto por setor (centavos). */
   sectorBudgets: Partial<Record<CategoryId, Cents>>;
   savingsRules: SavingsRulesConfig;

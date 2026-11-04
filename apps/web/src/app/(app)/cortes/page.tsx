@@ -1,5 +1,5 @@
-import { CortesView } from "@/components/cortes/cortes-view";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <CortesView />;
+  redirect("/metas");
 }
