@@ -347,3 +347,24 @@ export function reconcile(
     removed,
   };
 }
+
+export type BillPaymentStatus = "paga" | "parcial" | "em aberto";
+
+/**
+ * Situação de cada fatura pelo que o banco mandou de pagamentos: soma os pagamentos feitos
+ * depois do vencimento anterior até 5 dias depois deste vencimento.
+ */
+export function billPayments(bills: PluggyBill[], txs: PluggyTransaction[]): Map<string, { paid: number; status: BillPaymentStatus }> {
+  const payments = txs.filter(isCardPayment).map((t) => ({ date: t.date.slice(0, 10), cents: Math.round(Math.abs(brlAmount(t)) * 100) }));
+  const sorted = [...bills].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const plusDays = (iso: string, d: number) => new Date(Date.parse(iso.slice(0, 10)) + d * 86400000).toISOString().slice(0, 10);
+  const out = new Map<string, { paid: number; status: BillPaymentStatus }>();
+  sorted.forEach((b, i) => {
+    const from = i > 0 ? plusDays(sorted[i - 1].dueDate, 5) : "0000-00-00";
+    const to = plusDays(b.dueDate, 5);
+    const paid = payments.filter((p) => p.date > from && p.date <= to).reduce((s, p) => s + p.cents, 0);
+    const total = Math.round((b.totalAmount ?? 0) * 100);
+    out.set(b.id, { paid, status: total <= 0 || paid >= total - 100 ? "paga" : paid > 0 ? "parcial" : "em aberto" });
+  });
+  return out;
+}

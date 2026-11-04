@@ -1,10 +1,10 @@
 import "server-only";
 import { addMonths, monthOf } from "../domain/months";
-import type { HouseholdConfig, MonthKey, Transaction } from "../domain/types";
+import type { BankBill, HouseholdConfig, MonthKey, Transaction } from "../domain/types";
 import { ConflictError } from "../server/blob-store";
 import type { DriveDatabaseService } from "../server/database";
 import { getBills, getCreditAccounts, getTransactions } from "./pluggy-client";
-import { cardResolver, mapCardTransactions, reconcile } from "./pluggy-map";
+import { billPayments, cardResolver, mapCardTransactions, reconcile } from "./pluggy-map";
 
 export interface SyncSummary {
   added: number;
@@ -40,6 +40,7 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   // Parcelas de compras antigas vêm com a data da compra original: buscamos 2 anos para trás.
   const from = `${addMonths(firstMonth, -24)}-01`;
   const byMonth = new Map<MonthKey, Transaction[]>();
+  const billsByMonth = new Map<MonthKey, Record<string, BankBill>>();
 
   let okItems = 0;
   const syncedCardIds = new Set<string>();
@@ -51,6 +52,13 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
         const resolver = cardResolver(account, item.owner, cfg.cards);
         const [txs, bills] = await Promise.all([getTransactions(account.id, from), getBills(account.id)]);
         const mapped = mapCardTransactions(txs, resolver.forTx, bills, cfg.subscriptionMerchants);
+        const pay = billPayments(bills, txs);
+        for (const b of bills) {
+          const m = b.dueDate.slice(0, 7);
+          if (m < firstMonth) continue;
+          const p = pay.get(b.id)!;
+          billsByMonth.set(m, { ...billsByMonth.get(m), [resolver.main.id]: { total: Math.round((b.totalAmount ?? 0) * 100), paid: p.paid, status: p.status } });
+        }
         for (const c of resolver.created) {
           cfg.cards.push(c);
           summary.newCards.push(`${c.nickname} •${c.last4}`);
@@ -91,7 +99,7 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   }
   // Passa por todos os meses da janela (inclusive os que ficaram vazios), até 2 meses à frente.
   const lastMonth = addMonths(monthOf(new Date()), 2);
-  const months = new Set<MonthKey>(byMonth.keys());
+  const months = new Set<MonthKey>([...byMonth.keys(), ...billsByMonth.keys()]);
   for (let m = firstMonth; m <= lastMonth; m = addMonths(m, 1)) months.add(m);
   // E os meses já salvos (ex.: parcelas previstas lá na frente), para limpar o que mudou.
   for (const m of await db.listStatementMonths()) if (m >= firstMonth) months.add(m);
@@ -104,10 +112,12 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
         break;
       }
       const r = reconcile(cur.data.transactions, incoming, syncedCardIds);
-      if (r.added === 0 && r.updated === 0 && r.removed === 0) break;
-      if (cur.etag === null && r.merged.length === 0) break;
+      const bankBills = billsByMonth.has(month) ? { ...cur.data.bankBills, ...billsByMonth.get(month) } : cur.data.bankBills;
+      const billsChanged = JSON.stringify(bankBills ?? null) !== JSON.stringify(cur.data.bankBills ?? null);
+      if (r.added === 0 && r.updated === 0 && r.removed === 0 && !billsChanged) break;
+      if (cur.etag === null && r.merged.length === 0 && !billsChanged) break;
       try {
-        await db.saveStatement({ ...cur.data, transactions: r.merged }, cur.etag);
+        await db.saveStatement({ ...cur.data, transactions: r.merged, ...(bankBills ? { bankBills } : {}) }, cur.etag);
         summary.added += r.added;
         summary.updated += r.updated;
         summary.removed += r.removed;
@@ -134,13 +144,16 @@ export async function clearPluggyTransactions(
       const cur = await db.getStatement(month);
       const keep = cur.data.transactions.filter((t) => t.source !== "pluggy" || !match(t));
       const gone = cur.data.transactions.length - keep.length;
-      if (gone === 0) break;
+      if (gone === 0 && !cur.data.bankBills) break;
       if (cur.data.snapshot) {
         skippedClosedMonths.push(month);
         break;
       }
       try {
-        await db.saveStatement({ ...cur.data, transactions: keep }, cur.etag);
+        // A situação das faturas do banco volta na próxima sincronização.
+        const { bankBills: _drop, ...rest } = cur.data;
+        void _drop;
+        await db.saveStatement({ ...rest, transactions: keep }, cur.etag);
         removed += gone;
         break;
       } catch (e) {

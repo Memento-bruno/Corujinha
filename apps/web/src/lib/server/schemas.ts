@@ -39,6 +39,9 @@ export const statementSchema = z.object({
   month,
   transactions: z.array(transactionSchema).max(5000),
   snapshot: z.any().optional(),
+  bankBills: z
+    .record(z.string().max(80), z.object({ total: z.number().int(), paid: z.number().int(), status: z.enum(["paga", "parcial", "em aberto"]) }))
+    .optional(),
   updatedAt: z.string(),
 });
 
