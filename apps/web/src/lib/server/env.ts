@@ -60,6 +60,10 @@ export const env = {
   get pluggyClientSecret() {
     return v("PLUGGY_CLIENT_SECRET");
   },
+  /** Segredo que vai na URL do webhook (?token=). Sem ele, o webhook fica desligado. */
+  get pluggyWebhookSecret() {
+    return v("PLUGGY_WEBHOOK_SECRET");
+  },
   get appUrl() {
     return v("AUTH_URL") ?? "http://localhost:3000";
   },

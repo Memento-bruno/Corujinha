@@ -37,3 +37,15 @@ Ao publicar, gere o refresh token de novo (passo 4).
 
 ## 6. Instalar no celular
 Abra o link no Chrome (Android) ou Safari (iPhone) → **Adicionar à tela inicial**.
+
+## 7. (Opcional) Atualizar sozinho com o app fechado: webhook da Pluggy
+Sem isso, o app busca as compras ao abrir (no máximo a cada 6h) ou no botão **Sincronizar**.
+Com o webhook, a Pluggy avisa o app quando chegam compras novas.
+
+1. Gere um segredo aleatório (ex.: `openssl rand -hex 24`) e adicione na Vercel como `PLUGGY_WEBHOOK_SECRET`. Faça **Redeploy**.
+2. No [dashboard da Pluggy](https://dashboard.pluggy.ai), na sua aplicação, cadastre um webhook com o evento **all** e a URL:
+   `https://corujinha-xyz.vercel.app/api/webhooks/pluggy?token=SEU_SEGREDO`
+3. O webhook só funciona com o app publicado (a Pluggy não alcança o `localhost`).
+
+O webhook só dispara a mesma leitura do botão Sincronizar, e só para conexões cadastradas no app.
+Sem o `?token=` correto, a chamada é recusada.

@@ -70,6 +70,7 @@ Usaremos o **Meu Pluggy** (uso pessoal gratuito, até 5 conexões, sem uso comer
       Pluggy, escolher **MeuPluggy** e entrar com a conta do Meu Pluggy. A primeira sincronização roda sozinha.
       (Alternativa: colar o Item ID da conexão em "Já tenho o Item ID".)
 - [ ] Conferir as compras em Faturas. Se um dia o banco pedir nova autorização, use **Reconectar**.
+- [ ] (Opcional, depois do deploy) Cadastrar o webhook da Pluggy para atualizar com o app fechado ([DEPLOY.md, passo 7](apps/web/DEPLOY.md))
 
 Como funciona: o servidor lê só as contas de cartão de crédito (`/accounts`, `/v2/transactions`, `/bills`),
 cria o cartão no app pelos 4 últimos dígitos se ainda não existir, coloca cada compra no mês de vencimento da
