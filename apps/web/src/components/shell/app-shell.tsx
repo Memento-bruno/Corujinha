@@ -54,7 +54,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <AppProvider>
       <Toasts />
-      <div className="mx-auto w-full max-w-6xl px-4 pb-32 sm:px-6">
+      <div className="mx-auto w-full max-w-6xl px-3 pb-32 sm:px-6">
         <Body>{children}</Body>
       </div>
       <BottomNav />

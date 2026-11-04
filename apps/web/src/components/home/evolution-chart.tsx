@@ -49,7 +49,7 @@ export function EvolutionChart() {
   const DRAW_MS = 1100;
 
   return (
-    <section ref={ref} className="flex min-w-0 flex-[2_1_520px] flex-col rounded-3xl border border-[#ebebef] bg-white p-5 sm:p-6" aria-labelledby="evo-title">
+    <section ref={ref} className="flex min-w-0 flex-[2_1_520px] flex-col rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6" aria-labelledby="evo-title">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 id="evo-title" className="text-base font-bold">Evolução dos gastos</h2>
         <div className="flex gap-3.5 text-xs text-zinc-700">

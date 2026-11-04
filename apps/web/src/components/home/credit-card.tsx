@@ -27,39 +27,43 @@ export function CreditCardVisual({
   ownerName,
   className,
   selected,
+  compact,
 }: {
   card: CreditCard;
   ownerName: string;
   className?: string;
   selected?: boolean;
+  /** Versão pequena (celular, dois por linha). */
+  compact?: boolean;
 }) {
   return (
     <div
       className={cn(
         "holo relative aspect-[1.7/1] w-full overflow-hidden rounded-3xl p-4 text-zinc-900 shadow-soft transition sm:p-5",
+        compact && "rounded-2xl p-2.5 sm:p-5 [&_.cc-bottom]:p-2.5 sm:[&_.cc-bottom]:p-5 [&_.cc-num]:text-[11px] sm:[&_.cc-num]:text-lg [&_.cc-chip]:hidden sm:[&_.cc-chip]:block [&_.cc-top_svg]:size-4",
         selected && "ring-2 ring-zinc-900 ring-offset-2",
         className,
       )}
       style={{ background: CARD_THEMES[card.theme % CARD_THEMES.length] }}
     >
-      <div className="flex items-start justify-between">
+      <div className="cc-top flex items-start justify-between">
         <Sparkle className="size-7 text-zinc-900" strokeWidth={1.4} />
         <div className="flex items-center gap-3">
           <Nfc className="size-4 text-zinc-900/60" />
           <BrandMark brand={card.brand} />
         </div>
       </div>
-      <div className="absolute inset-x-0 bottom-0 rounded-3xl bg-white/45 p-4 backdrop-blur-md sm:p-5">
+      <div className="cc-bottom absolute inset-x-0 bottom-0 rounded-3xl bg-white/45 p-4 backdrop-blur-md sm:p-5">
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-zinc-600">
+            <p className="truncate text-[10px] font-medium text-zinc-600 sm:text-xs">
               {card.nickname} · {ownerName}
             </p>
-            <p className="tabular mt-1 text-base font-semibold whitespace-nowrap text-zinc-800 sm:text-lg">
+            <p className="cc-num tabular mt-1 text-base font-semibold whitespace-nowrap text-zinc-800 sm:text-lg">
               <span className="tracking-[0.12em]">**** **** ****</span> {card.last4}
             </p>
           </div>
-          <span className="h-7 w-10 shrink-0 rounded-md bg-gradient-to-br from-zinc-200 via-white to-zinc-400 shadow-inner" />
+          <span className="cc-chip h-7 w-10 shrink-0 rounded-md bg-gradient-to-br from-zinc-200 via-white to-zinc-400 shadow-inner" />
         </div>
       </div>
     </div>

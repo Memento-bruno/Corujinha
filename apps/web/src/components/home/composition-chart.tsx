@@ -27,7 +27,7 @@ export function CompositionChart() {
   const grid = [0.25, 0.5, 0.75, 1];
 
   return (
-    <section ref={ref} aria-labelledby="stack-title" className="rounded-3xl border border-[#ebebef] bg-white p-5 sm:p-6">
+    <section ref={ref} aria-labelledby="stack-title" className="rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6">
       <h2 id="stack-title" className="text-lg font-bold">Do que é feito cada mês</h2>
       <p className="mt-1 text-sm text-zinc-600">Os meses depois de {monthName(d.openMonth)} são previstos (listrados).</p>
       <div className="mt-4 flex flex-wrap gap-2">
@@ -39,14 +39,14 @@ export function CompositionChart() {
         ))}
       </div>
 
-      <div className="no-scrollbar mt-5 overflow-x-auto">
-        <div className="relative min-w-[600px]" style={{ height: H + 28 }}>
+      <div className="mt-5">
+        <div className="relative" style={{ height: H + 28 }}>
           {grid.map((g) => (
             <span key={g} className="absolute inset-x-0 border-t border-dashed border-zinc-200" style={{ bottom: 28 + g * H }} aria-hidden>
               {!fmt.privacy && <span className="absolute -top-4 left-0 text-[10px] font-semibold text-zinc-400">{fmt.num(g * max)}</span>}
             </span>
           ))}
-          <div className="absolute inset-x-0 top-0 flex items-end gap-3 pl-8" style={{ height: H }}>
+          <div className="absolute inset-x-0 top-0 flex items-end gap-1 pl-7 sm:gap-3 sm:pl-8" style={{ height: H }}>
             {data.map((m, i) => {
               const sel = m.month === d.month;
               const h = (m.total / max) * H;
@@ -59,11 +59,11 @@ export function CompositionChart() {
                   onMouseLeave={() => setHover(null)}
                   onFocus={() => setHover(m.month)}
                   onBlur={() => setHover(null)}
-                  className="group flex h-full flex-1 flex-col items-center justify-end"
+                  className="group flex h-full min-w-0 flex-1 flex-col items-center justify-end"
                   aria-label={`${monthName(m.month)}${m.forecast ? " (previsto)" : ""}: ${fmt.money(m.total)}`}
                 >
                   <span
-                    className={`tabular mb-1.5 rounded-full px-2 py-0.5 text-[11px] font-extrabold whitespace-nowrap transition-opacity duration-300 ${sel ? "bg-zinc-900 text-white" : "text-zinc-700"}`}
+                    className={`tabular mb-1.5 rounded-full px-1 py-0.5 text-[9px] font-extrabold sm:px-2 sm:text-[11px] whitespace-nowrap transition-opacity duration-300 ${sel ? "bg-zinc-900 text-white" : "text-zinc-700"}`}
                     style={{ opacity: shown ? 1 : 0, transitionDelay: `${500 + i * 60}ms` }}
                   >
                     {fmt.num(m.total)}
@@ -79,10 +79,10 @@ export function CompositionChart() {
                       return (
                         <span
                           key={c.key}
-                          className="tabular flex shrink-0 items-center justify-center overflow-hidden rounded-[5px] text-[11px] font-bold"
+                          className="tabular flex shrink-0 items-center justify-center overflow-hidden rounded-[5px] text-[9px] font-bold sm:text-[11px]"
                           style={{ height: Math.max(2, sh - 2), background: c.color, color: c.text }}
                         >
-                          {sh >= 22 ? fmt.num(v) : ""}
+                          {sh >= 22 ? <span className="hidden sm:inline">{fmt.num(v)}</span> : ""}
                         </span>
                       );
                     })}
@@ -98,9 +98,9 @@ export function CompositionChart() {
               );
             })}
           </div>
-          <div className="absolute inset-x-0 bottom-0 flex gap-3 border-t border-zinc-200 pt-2 pl-8">
+          <div className="absolute inset-x-0 bottom-0 flex gap-1 border-t border-zinc-200 pt-2 pl-7 sm:gap-3 sm:pl-8">
             {data.map((m) => (
-              <span key={m.month} className={`flex-1 text-center text-xs ${m.month === d.month ? "font-extrabold text-zinc-900" : "font-semibold text-zinc-500"}`}>
+              <span key={m.month} className={`min-w-0 flex-1 text-center text-[10px] sm:text-xs ${m.month === d.month ? "font-extrabold text-zinc-900" : "font-semibold text-zinc-500"}`}>
                 {monthShort(m.month)}
               </span>
             ))}

@@ -28,10 +28,10 @@ export function CategoriesCard() {
   const [ref, shown] = useReveal<HTMLElement>();
   const [mode, setMode] = useState<"donut" | "bars">("donut");
   return (
-    <section ref={ref} aria-labelledby="cat-title" className="min-w-0 flex-[1_1_400px] rounded-3xl border border-[#ebebef] bg-white p-5 sm:p-6">
+    <section ref={ref} aria-labelledby="cat-title" className="min-w-0 flex-[1_1_400px] rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 id="cat-title" className="text-lg font-bold">Para onde foi o dinheiro</h2>
+          <h2 id="cat-title" className="text-base font-bold sm:text-lg">Para onde foi o dinheiro</h2>
           <p className="mt-1 text-sm text-zinc-600 first-letter:uppercase">{monthName(d.month)}, por categoria</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">

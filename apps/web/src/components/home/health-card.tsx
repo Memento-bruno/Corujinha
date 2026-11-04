@@ -39,7 +39,7 @@ export function HealthCard() {
   const trend =
     diff === null ? "" : diff === 0 ? `Igual a ${monthName(d.prevMonth)}.` : `${diff > 0 ? "Subiu" : "Caiu"} ${Math.abs(diff)} ponto${Math.abs(diff) === 1 ? "" : "s"} desde ${monthName(d.prevMonth)}.`;
   return (
-    <section ref={ref} aria-labelledby="saude-title" className="flex min-w-0 flex-[1_1_300px] flex-col gap-3.5 rounded-3xl border border-[#ebebef] bg-white p-5 sm:p-6">
+    <section ref={ref} aria-labelledby="saude-title" className="flex min-w-0 flex-[1_1_300px] flex-col gap-3.5 rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6">
       <div>
         <h2 id="saude-title" className="text-base font-bold">Saúde financeira</h2>
         <p className="mt-1 text-[13px] text-zinc-600">Nota de 0 a 100, calculada por regras simples</p>

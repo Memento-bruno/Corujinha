@@ -36,7 +36,7 @@ export function SpendHero() {
   const [ref, shown] = useReveal<HTMLElement>();
 
   return (
-    <section ref={ref} aria-labelledby="gastos-title" className="flex flex-wrap items-stretch gap-8 rounded-3xl border border-[#ebebef] bg-white p-5 sm:p-6">
+    <section ref={ref} aria-labelledby="gastos-title" className="flex flex-wrap items-stretch gap-5 rounded-3xl border border-[#ebebef] bg-white p-4 sm:gap-8 sm:p-6">
       <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3.5">
         <div className="flex flex-wrap items-center gap-2">
           <h1 id="gastos-title" className="text-lg font-bold text-zinc-900">
@@ -77,7 +77,7 @@ export function SpendHero() {
           </div>
         </div>
 
-        <div className="rounded-2xl bg-[#F4F5F7] p-4">
+        <div className="rounded-2xl bg-[#F4F5F7] p-3.5 sm:p-4">
           <div className="flex items-baseline justify-between gap-3">
             <span className="text-[13px] font-semibold text-zinc-600">Quanto da renda os gastos usam</span>
             <span className="tabular text-[22px] font-extrabold">{pctText(income.couple)}</span>
@@ -108,7 +108,7 @@ export function SpendHero() {
       </div>
 
       <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3 rounded-[20px] bg-[#F4F5F7] px-[18px] py-4">
+        <div className="flex flex-wrap items-center gap-3 rounded-[20px] bg-[#F4F5F7] px-3.5 py-3 sm:px-[18px] sm:py-4">
           <h2 className="w-full text-[13px] font-semibold text-zinc-600">Quem deve a quem</h2>
           {t ? (
             <>
@@ -130,19 +130,19 @@ export function SpendHero() {
           </Link>
         </div>
 
-        <div className="flex flex-auto flex-col gap-2 rounded-[20px] bg-[#F4F5F7] px-[18px] py-3.5">
+        <div className="flex flex-auto flex-col gap-2 rounded-[20px] bg-[#F4F5F7] px-3.5 py-3 sm:px-[18px] sm:py-3.5">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-[13px] font-semibold text-zinc-600">Meta de gastos do mês</h2>
             {goal > 0 && <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${goalChip.tone}`}>{goalChip.label}</span>}
           </div>
           {goal > 0 ? (
-            <div className="flex flex-auto flex-wrap items-center gap-5">
-              <div className="min-w-0 max-w-[280px] flex-[1_1_220px]">
+            <div className="flex flex-auto items-center gap-3 sm:gap-5">
+              <div className="min-w-0 max-w-[280px] flex-[1.2_1_0]">
                 <Speedometer shown={shown} ratio={ratio} label={`Velocímetro: ${Math.round(ratio * 100)} por cento da meta usada`} />
               </div>
-              <div className="flex min-w-0 flex-[1_1_150px] flex-col gap-2">
+              <div className="flex min-w-0 flex-[1_1_0] flex-col gap-1.5 sm:gap-2">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-[40px] leading-none font-extrabold">{formatPct(Math.round(ratio * 100))}</span>
+                  <span className="text-[28px] leading-none font-extrabold sm:text-[40px]">{formatPct(Math.round(ratio * 100))}</span>
                   <span className="text-[13px] text-zinc-600">da meta</span>
                 </div>
                 <Row label="Gasto" value={fmt.money(total, goal)} />
@@ -183,7 +183,7 @@ function Dot({ u, name }: { u: UserId; name: string }) {
 
 function Row({ label, value, tone = "text-zinc-900" }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="flex justify-between gap-2 text-sm text-zinc-600">
+    <div className="flex flex-wrap justify-between gap-x-2 text-[13px] text-zinc-600 sm:text-sm">
       <span>{label}</span>
       <b className={`tabular ${tone}`}>{value}</b>
     </div>

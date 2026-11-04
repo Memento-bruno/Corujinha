@@ -17,7 +17,7 @@ export function CardsStrip() {
     .sort((a, b) => b.total - a.total);
   const top = Math.max(1, cards[0]?.total ?? 1);
   return (
-    <section ref={ref} aria-labelledby="cards-title" className="rounded-3xl border border-[#ebebef] bg-white p-5 sm:p-6">
+    <section ref={ref} aria-labelledby="cards-title" className="rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 id="cards-title" className="text-lg font-bold">Gasto por cartão</h2>
@@ -34,14 +34,14 @@ export function CardsStrip() {
           {cards.map(({ c, total }, i) => (
             <div
               key={c.id}
-              className="w-[78%] shrink-0 snap-start transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none sm:w-[300px]"
+              className="w-[46%] shrink-0 snap-start transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none sm:w-[300px]"
               style={{ opacity: shown ? 1 : 0, transform: shown ? "none" : "translateY(12px)", transitionDelay: `${i * 90}ms` }}
             >
               <div className="relative">
-                <CreditCardVisual card={c} ownerName={d.users[c.owner].name.split(" ")[0]} />
+                <CreditCardVisual compact card={c} ownerName={d.users[c.owner].name.split(" ")[0]} />
                 <span className="absolute top-3 left-1/2 -translate-x-1/2 rounded-full bg-zinc-900 px-2.5 py-0.5 text-xs font-extrabold text-white">{i + 1}º</span>
               </div>
-              <div className="mt-2.5 flex items-center justify-between px-1 text-sm">
+              <div className="mt-2.5 flex flex-col px-1 text-sm sm:flex-row sm:items-center sm:justify-between">
                 <span className="text-zinc-600">Fatura do mês</span>
                 <span className="tabular font-bold">{fmt.money(total)}</span>
               </div>

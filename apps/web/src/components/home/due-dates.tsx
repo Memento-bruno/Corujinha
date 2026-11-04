@@ -41,7 +41,7 @@ export function DueDates() {
   };
 
   return (
-    <section aria-labelledby="due-title" className="rounded-3xl border border-[#ebebef] bg-white p-4 sm:px-5">
+    <section aria-labelledby="due-title" className="rounded-3xl border border-[#ebebef] bg-white p-3.5 sm:p-4 sm:px-5">
       <div className="flex items-center justify-between gap-3">
         <h2 id="due-title" className="flex items-center gap-2 text-[15px] font-bold">
           <CalendarClock className="size-[18px] text-[#4f52d6]" /> Próximos vencimentos

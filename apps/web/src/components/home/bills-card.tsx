@@ -16,16 +16,16 @@ export function BillsCard() {
   const debts = state!.recurring.data.debts.filter((x) => isDebtActiveIn(x, d.month)).sort((a, b) => a.dueDay - b.dueDay);
   const total = debts.reduce((s, x) => s + x.amount, 0);
   return (
-    <section aria-labelledby="fix-title" className="min-w-0 flex-[1_1_340px] rounded-3xl border border-[#ebebef] bg-white p-5 sm:p-6">
+    <section aria-labelledby="fix-title" className="min-w-0 flex-[1_1_340px] rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 id="fix-title" className="text-lg font-bold">Contas fixas e boletos</h2>
+          <h2 id="fix-title" className="text-base font-bold sm:text-lg">Contas fixas e boletos</h2>
           <p className="mt-1 text-sm text-zinc-600">Repetem todo mês, dentro ou fora do cartão</p>
         </div>
         <button
           type="button"
           onClick={() => setEditing(newDebt(d.month))}
-          className="inline-flex h-11 shrink-0 items-center rounded-full border border-zinc-300 bg-white px-4 text-sm font-semibold"
+          className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border border-zinc-300 bg-white px-3 text-sm font-semibold sm:h-11 sm:px-4"
         >
           + Nova conta
         </button>
