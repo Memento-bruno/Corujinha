@@ -28,7 +28,8 @@ export function MonthSwitcher() {
   const { state, setMonth } = useStore();
   if (!state) return null;
   const { month, availableMonths } = state;
-  const today = currentMonth();
+  // "Atual" = fatura em aberto (ex.: em novembro, com a de novembro fechada, é dezembro).
+  const today = state.openMonth ?? currentMonth();
   const options = [...new Set([...availableMonths, today, month])].sort();
   const min = options[0];
   const max = options.at(-1)!;
@@ -56,7 +57,7 @@ export function MonthSwitcher() {
             {[...options].reverse().map((m) => (
               <option key={m} value={m}>
                 {monthLabel(m)}
-                {m === today ? " (atual)" : ""}
+                {m === today ? " (fatura atual)" : ""}
               </option>
             ))}
           </select>
@@ -69,7 +70,7 @@ export function MonthSwitcher() {
         {status && <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${status.tone}`}>Fatura {status.label.toLowerCase()}</span>}
         {month !== today && (
           <button className="rounded-full bg-zinc-900 px-2.5 py-0.5 text-[11px] font-semibold text-white" onClick={() => setMonth(today)}>
-            Ir para o mês atual
+            Ir para a fatura atual
           </button>
         )}
       </div>
