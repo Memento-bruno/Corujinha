@@ -2,6 +2,7 @@
  * Conversão (pura, testável) dos dados da Pluggy para o modelo do Corujinha.
  * Escopo estrito: só contas de cartão de crédito, só leitura.
  */
+import { addMonths } from "../domain/months";
 import type { CardBrand, CreditCard, MonthKey, Transaction, UserId } from "../domain/types";
 import { cleanDescription, guessCategory, merchantKeyOf } from "../importers/normalize";
 import { isInvoicePayment } from "../importers/types";
@@ -21,6 +22,10 @@ export interface PluggyTransaction {
   description: string;
   descriptionRaw?: string | null;
   amount: number;
+  /** Valor convertido para a moeda da conta (BRL) em compras internacionais. */
+  amountInAccountCurrency?: number | null;
+  currencyCode?: string | null;
+  category?: string | null;
   date: string;
   type?: string;
   status?: string | null;
@@ -37,6 +42,20 @@ export interface PluggyTransaction {
 export interface PluggyBill {
   id: string;
   dueDate: string;
+  totalAmount?: number | null;
+}
+
+/** Valor em reais: compras em dólar vêm com `amount` na moeda original. */
+export function brlAmount(t: PluggyTransaction): number {
+  return typeof t.amountInAccountCurrency === "number" && t.amountInAccountCurrency !== 0 ? t.amountInAccountCurrency : t.amount;
+}
+
+/** Pagamento da fatura (não é gasto): pela categoria da Pluggy ou pela descrição. */
+export function isCardPayment(t: PluggyTransaction): boolean {
+  if (/credit card payment/i.test(t.category ?? "")) return true;
+  return [t.description, t.descriptionRaw ?? ""].some(
+    (d) => isInvoicePayment(d) || /\b(pag(to|amento)?|pgto)\.?\s*(de\s*)?(fatura|cart[aã]o)|deb(ito)?\.?\s*aut(om)?\.?\s*fatura/i.test(d),
+  );
 }
 
 export function last4Of(...candidates: (string | null | undefined)[]): string | null {
@@ -78,13 +97,50 @@ export function resolveCard(
 }
 
 /**
+ * Cada conta de crédito pode ter vários cartões (físico, virtuais, adicionais). A Pluggy informa
+ * o final do cartão de cada compra em `creditCardMetadata.cardNumber`; usamos isso para separar.
+ * Compras sem essa informação ficam no cartão principal da conta.
+ */
+export function cardResolver(account: PluggyAccount, owner: UserId, cards: CreditCard[]) {
+  const pool = [...cards];
+  const created: CreditCard[] = [];
+  const { card: main, created: mainCreated } = resolveCard(account, owner, pool);
+  if (mainCreated) {
+    pool.push(main);
+    created.push(main);
+  }
+  const base = (account.marketingName || account.name || "Cartão").slice(0, 30);
+  const forLast4 = (last4: string | null): CreditCard => {
+    if (!last4 || last4 === main.last4) return main;
+    const existing = pool.find((c) => c.owner === owner && c.last4 === last4);
+    if (existing) return existing;
+    const card: CreditCard = {
+      id: `card-pluggy-${account.id.slice(0, 8)}-${last4}`,
+      owner,
+      nickname: `${base} virtual`.slice(0, 40),
+      last4,
+      brand: main.brand,
+      theme: pool.length % 4,
+    };
+    pool.push(card);
+    created.push(card);
+    return card;
+  };
+  return {
+    main,
+    created,
+    forTx: (t: PluggyTransaction) => forLast4(last4Of(t.creditCardMetadata?.cardNumber)),
+  };
+}
+
+/**
  * A convenção de sinal das contas de cartão varia entre instituições. Em vez de supor,
  * medimos: numa fatura, a maioria dos lançamentos são compras. Se a maioria vier
  * negativa, invertemos para que gasto fique positivo, como no resto do app.
  */
 export function expenseSign(txs: PluggyTransaction[]): 1 | -1 {
-  const relevant = txs.filter((t) => !isInvoicePayment(t.description) && t.amount !== 0);
-  const negatives = relevant.filter((t) => t.amount < 0).length;
+  const relevant = txs.filter((t) => !isCardPayment(t) && brlAmount(t) !== 0);
+  const negatives = relevant.filter((t) => brlAmount(t) < 0).length;
   return relevant.length > 0 && negatives / relevant.length > 0.5 ? -1 : 1;
 }
 
@@ -95,29 +151,33 @@ function monthOfIso(iso: string): MonthKey {
 /** Converte as transações de UMA conta de cartão em transações do Corujinha, agrupadas por mês da fatura. */
 export function mapCardTransactions(
   txs: PluggyTransaction[],
-  card: CreditCard,
+  cardOrResolver: CreditCard | ((t: PluggyTransaction) => CreditCard),
   bills: PluggyBill[],
   subscriptionMerchants: string[],
 ): Map<MonthKey, Transaction[]> {
+  const cardFor = typeof cardOrResolver === "function" ? cardOrResolver : () => cardOrResolver;
   const sign = expenseSign(txs);
   const billMonth = new Map(bills.map((b) => [b.id, monthOfIso(b.dueDate)]));
   const out = new Map<MonthKey, Transaction[]>();
   for (const t of txs) {
     if ((t.status ?? "POSTED").toUpperCase() === "PENDING") continue;
     const rawDesc = t.merchant?.name || t.description || t.descriptionRaw || "";
-    if (!rawDesc || isInvoicePayment(t.description) || isInvoicePayment(t.descriptionRaw ?? "")) continue;
-    const cents = Math.round(t.amount * 100) * sign;
+    if (!rawDesc || isCardPayment(t)) continue;
+    const cents = Math.round(brlAmount(t) * 100) * sign;
     if (cents === 0) continue;
     const description = cleanDescription(rawDesc).slice(0, 140) || "Compra";
     const merchantKey = merchantKeyOf(description);
     const category = guessCategory(description, merchantKey);
     const meta = t.creditCardMetadata;
+    const card = cardFor(t);
     const installment =
       meta?.installmentNumber && meta?.totalInstallments && meta.totalInstallments > 1
         ? { current: meta.installmentNumber, total: meta.totalInstallments }
         : undefined;
     const date = t.date.slice(0, 10);
-    const month = (meta?.billId && billMonth.get(meta.billId)) || monthOfIso(date);
+    // Sem fatura vinculada, a parcela N de uma compra antiga cai N-1 meses depois da compra.
+    const fallback = installment ? addMonths(monthOfIso(date), installment.current - 1) : monthOfIso(date);
+    const month = (meta?.billId && billMonth.get(meta.billId)) || fallback;
     const tx: Transaction = {
       id: `plg-${t.id}`,
       externalId: `pluggy:${t.id}`,
@@ -145,5 +205,54 @@ export function mergeNew(existing: Transaction[], incoming: Transaction[]): { me
   return {
     merged: [...existing, ...fresh].sort((a, b) => a.date.localeCompare(b.date)),
     added: fresh.length,
+  };
+}
+
+/**
+ * Atualiza o mês com o que o banco informa, preservando o que o casal editou.
+ * - Compra nova: entra.
+ * - Compra do banco já salva: corrige valor, data e parcela; mantém divisão, categoria, tags e descrição.
+ * - Compra do banco salva que não veio mais (virou pagamento, mudou de mês): sai.
+ * Só mexe em compras `source: "pluggy"` dos cartões que sincronizaram com sucesso agora.
+ */
+export function reconcile(
+  existing: Transaction[],
+  incoming: Transaction[],
+  syncedCardIds: Set<string>,
+): { merged: Transaction[]; added: number; updated: number; removed: number } {
+  const byExt = new Map(incoming.map((t) => [t.externalId, t]));
+  const seen = new Set<string | undefined>();
+  let updated = 0;
+  let removed = 0;
+  const kept: Transaction[] = [];
+  for (const t of existing) {
+    const managed = t.source === "pluggy" && syncedCardIds.has(t.cardId);
+    if (!managed) {
+      kept.push(t);
+      continue;
+    }
+    const fresh = byExt.get(t.externalId);
+    if (!fresh) {
+      removed++;
+      continue;
+    }
+    seen.add(t.externalId);
+    const next = { ...t, amount: fresh.amount, date: fresh.date, installment: fresh.installment, cardId: fresh.cardId, paidBy: fresh.paidBy };
+    if (
+      next.amount !== t.amount ||
+      next.date !== t.date ||
+      next.cardId !== t.cardId ||
+      JSON.stringify(next.installment) !== JSON.stringify(t.installment)
+    )
+      updated++;
+    kept.push(next);
+  }
+  const known = new Set(existing.map((t) => t.externalId).filter(Boolean));
+  const fresh = incoming.filter((t) => !seen.has(t.externalId) && !known.has(t.externalId));
+  return {
+    merged: [...kept, ...fresh].sort((a, b) => a.date.localeCompare(b.date)),
+    added: fresh.length,
+    updated,
+    removed,
   };
 }

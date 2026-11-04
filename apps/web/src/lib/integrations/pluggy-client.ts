@@ -82,6 +82,7 @@ export async function getTransactions(accountId: string, from: string): Promise<
     const r = await get<{ results: PluggyTransaction[]; next?: string | null }>("/v2/transactions", {
       accountId,
       dateFrom: from,
+      pageSize: "500",
       after,
     });
     all.push(...(r.results ?? []));

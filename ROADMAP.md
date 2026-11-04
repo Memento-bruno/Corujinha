@@ -73,8 +73,10 @@ Usaremos o **Meu Pluggy** (uso pessoal gratuito, até 5 conexões, sem uso comer
 - [ ] (Opcional, depois do deploy) Cadastrar o webhook da Pluggy para atualizar com o app fechado ([DEPLOY.md, passo 7](apps/web/DEPLOY.md))
 
 Como funciona: o servidor lê só as contas de cartão de crédito (`/accounts`, `/v2/transactions`, `/bills`),
-cria o cartão no app pelos 4 últimos dígitos se ainda não existir, coloca cada compra no mês de vencimento da
-fatura e nunca altera compras que vocês já editaram nem meses fechados. O app sincroniza sozinho ao abrir
+cria o cartão no app pelos 4 últimos dígitos se ainda não existir (cartões virtuais e adicionais viram cartões
+próprios), coloca cada compra no mês de vencimento da fatura e corrige valores vindos do banco sem mexer na
+divisão, categoria e tags que vocês editaram, nem em meses fechados. Para conferir com o banco, use
+Ajustes → Open Finance → "Conferir valores com o banco". O app sincroniza sozinho ao abrir
 (no máximo a cada 6h) e há um botão em Faturas → Importar. O importador de arquivos continua valendo para
 bancos que não estejam no Open Finance.
 

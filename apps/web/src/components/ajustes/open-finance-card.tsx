@@ -115,6 +115,11 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
             </ul>
           )}
           {items.length > 0 && (
+            <a href="/api/pluggy/diagnostico" target="_blank" rel="noreferrer" className="mb-3 block text-center text-xs font-semibold text-brand-600 underline">
+              Conferir valores com o banco
+            </a>
+          )}
+          {items.length > 0 && (
             <Button className="mb-4 w-full" disabled={bankSyncing} onClick={() => void syncBank()}>
               {bankSyncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Sincronizar agora
             </Button>
