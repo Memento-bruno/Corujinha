@@ -102,7 +102,13 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   const months = new Set<MonthKey>([...byMonth.keys(), ...billsByMonth.keys()]);
   for (let m = firstMonth; m <= lastMonth; m = addMonths(m, 1)) months.add(m);
   // E os meses já salvos (ex.: parcelas previstas lá na frente), para limpar o que mudou.
-  for (const m of await db.listStatementMonths()) if (m >= firstMonth) months.add(m);
+  // Meses antigos entram só para limpar compras de conexões removidas.
+  for (const m of await db.listStatementMonths()) months.add(m);
+  const itemIds = new Set(items.map((i) => i.itemId));
+  const allClean = summary.errors.length === 0;
+  // Compra do banco de uma conexão que não existe mais (ou de cartão que nenhuma conexão trouxe).
+  const isOrphan = (t: Transaction) =>
+    allClean && t.source === "pluggy" && (t.pluggyItemId ? !itemIds.has(t.pluggyItemId) : !syncedCardIds.has(t.cardId));
   for (const month of [...months].sort()) {
     const incoming = byMonth.get(month) ?? [];
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -111,7 +117,12 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
         if (incoming.length) summary.skippedClosedMonths.push(month);
         break;
       }
-      const r = reconcile(cur.data.transactions, incoming, syncedCardIds);
+      const base =
+        month < firstMonth
+          ? { merged: cur.data.transactions, added: 0, updated: 0, removed: 0 }
+          : reconcile(cur.data.transactions, incoming, syncedCardIds);
+      const merged = base.merged.filter((t) => !isOrphan(t));
+      const r = { ...base, merged, removed: base.removed + (base.merged.length - merged.length) };
       const bankBills = billsByMonth.has(month) ? { ...cur.data.bankBills, ...billsByMonth.get(month) } : cur.data.bankBills;
       const billsChanged = JSON.stringify(bankBills ?? null) !== JSON.stringify(cur.data.bankBills ?? null);
       if (r.added === 0 && r.updated === 0 && r.removed === 0 && !billsChanged) break;
