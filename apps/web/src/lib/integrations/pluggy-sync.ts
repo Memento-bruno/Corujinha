@@ -4,7 +4,7 @@ import type { HouseholdConfig, MonthKey, Transaction } from "../domain/types";
 import { ConflictError } from "../server/blob-store";
 import type { DriveDatabaseService } from "../server/database";
 import { getBills, getCreditAccounts, getTransactions } from "./pluggy-client";
-import { mapCardTransactions, reconcile, resolveCard } from "./pluggy-map";
+import { cardResolver, mapCardTransactions, reconcile } from "./pluggy-map";
 
 export interface SyncSummary {
   added: number;
@@ -48,19 +48,21 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
       const accounts = await getCreditAccounts(item.itemId);
       for (const account of accounts) {
         summary.accounts++;
-        const { card, created } = resolveCard(account, item.owner, cfg.cards);
-        if (created) {
-          cfg.cards.push(card);
-          summary.newCards.push(`${card.nickname} •${card.last4}`);
-        }
+        const resolver = cardResolver(account, item.owner, cfg.cards);
         const [txs, bills] = await Promise.all([getTransactions(account.id, from), getBills(account.id)]);
-        const mapped = mapCardTransactions(txs, card, bills, cfg.subscriptionMerchants);
+        const mapped = mapCardTransactions(txs, resolver.forTx, bills, cfg.subscriptionMerchants);
+        for (const c of resolver.created) {
+          cfg.cards.push(c);
+          summary.newCards.push(`${c.nickname} •${c.last4}`);
+        }
         // Só marca o cartão como sincronizado depois de ler tudo dele sem erro.
         for (const [m, list] of mapped) {
           if (m < firstMonth) continue;
           byMonth.set(m, [...(byMonth.get(m) ?? []), ...list]);
         }
-        syncedCardIds.add(card.id);
+        syncedCardIds.add(resolver.main.id);
+        for (const c of resolver.created) syncedCardIds.add(c.id);
+        for (const list of mapped.values()) for (const t of list) syncedCardIds.add(t.cardId);
       }
       okItems++;
     } catch (e) {

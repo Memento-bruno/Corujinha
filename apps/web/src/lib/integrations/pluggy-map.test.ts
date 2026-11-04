@@ -138,3 +138,21 @@ describe("reconcile", () => {
     expect(r.merged).toHaveLength(1);
   });
 });
+
+describe("cartões virtuais", () => {
+  it("separa as compras pelo final do cartão informado", async () => {
+    const { cardResolver } = await import("./pluggy-map");
+    const r = cardResolver({ id: "acc12345xyz", type: "CREDIT", number: "1234", name: "Santander" }, "USER_A", [card]);
+    const out = mapCardTransactions(
+      [tx("f", 10, { creditCardMetadata: { cardNumber: "1234" } }), tx("v", 20, { creditCardMetadata: { cardNumber: "**** 9876" } }), tx("n", 30)],
+      r.forTx,
+      [],
+      [],
+    );
+    const list = out.get("2026-10")!;
+    expect(list.find((t) => t.externalId === "pluggy:f")!.cardId).toBe("card-1");
+    expect(list.find((t) => t.externalId === "pluggy:n")!.cardId).toBe("card-1");
+    expect(list.find((t) => t.externalId === "pluggy:v")!.cardId).toBe("card-pluggy-acc12345-9876");
+    expect(r.created.map((c) => [c.last4, c.nickname])).toEqual([["9876", "Santander virtual"]]);
+  });
+});

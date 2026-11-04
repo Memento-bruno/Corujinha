@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { formatBRL } from "@/lib/domain/money";
 import { getBills, getCreditAccounts, getTransactions, PluggyError } from "@/lib/integrations/pluggy-client";
-import { brlAmount, expenseSign, isCardPayment, last4Of, mapCardTransactions, resolveCard } from "@/lib/integrations/pluggy-map";
+import { brlAmount, expenseSign, isCardPayment, last4Of, mapCardTransactions, cardResolver } from "@/lib/integrations/pluggy-map";
 import { addMonths, monthOf } from "@/lib/domain/months";
 import { getDatabase } from "@/lib/server/database";
 import { isPluggyConfigured } from "@/lib/server/env";
@@ -31,9 +31,13 @@ export async function GET() {
   for (const item of cfg.pluggyItems ?? []) {
     try {
       for (const account of await getCreditAccounts(item.itemId)) {
-        const { card } = resolveCard(account, item.owner, cfg.cards);
+        const resolver = cardResolver(account, item.owner, cfg.cards);
+        const card = resolver.main;
         const [txs, bills] = await Promise.all([getTransactions(account.id, from), getBills(account.id)]);
-        const mapped = mapCardTransactions(txs, card, bills, []);
+        const mapped = mapCardTransactions(txs, resolver.forTx, bills, []);
+        const accountCards = new Set([card.id, ...resolver.created.map((c) => c.id)]);
+        for (const list of mapped.values()) for (const t of list) accountCards.add(t.cardId);
+        const cardFinals = [...new Set(txs.map((t) => last4Of(t.creditCardMetadata?.cardNumber)).filter(Boolean))];
         const foreign = txs.filter((t) => t.currencyCode && t.currencyCode !== "BRL").length;
         const payments = txs.filter(isCardPayment).length;
         const pending = txs.filter((t) => (t.status ?? "").toUpperCase() === "PENDING").length;
@@ -48,7 +52,7 @@ export async function GET() {
           if (m < firstMonth) continue;
           const bill = bills.find((b) => b.dueDate.slice(0, 7) === m);
           const ours = (mapped.get(m) ?? []).reduce((s, t) => s + t.amount, 0);
-          const saved = (await db.getStatement(m)).data.transactions.filter((t) => t.cardId === card.id).reduce((s, t) => s + t.amount, 0);
+          const saved = (await db.getStatement(m)).data.transactions.filter((t) => accountCards.has(t.cardId)).reduce((s, t) => s + t.amount, 0);
           const bank = typeof bill?.totalAmount === "number" ? Math.round(bill.totalAmount * 100) : null;
           const diff = bank === null ? "" : formatBRL(ours - bank);
           rows.push(
@@ -56,7 +60,7 @@ export async function GET() {
           );
         }
         parts.push(`<h2>${esc(card.nickname)} •${last4Of(account.number) ?? "????"}</h2>
-<p>${txs.length} lançamentos desde ${dates[0] ?? "-"} · sinal ${expenseSign(txs) === 1 ? "positivo" : "invertido"} (${sumPos} positivos) · ${payments} pagamentos de fatura ignorados · ${pending} pendentes · ${foreign} em moeda estrangeira · ${installments} parcelados · ${noBill} sem fatura vinculada · ${bills.length} faturas informadas pelo banco</p>
+<p>${txs.length} lançamentos desde ${dates[0] ?? "-"} · sinal ${expenseSign(txs) === 1 ? "positivo" : "invertido"} (${sumPos} positivos) · ${payments} pagamentos de fatura ignorados · ${pending} pendentes · ${foreign} em moeda estrangeira · ${installments} parcelados · ${noBill} sem fatura vinculada · ${bills.length} faturas informadas pelo banco · finais de cartão nas compras: ${cardFinals.length ? cardFinals.map((f) => "•" + f).join(", ") : "não informados"}</p>
 <table><tr><th>Fatura</th><th>Banco</th><th>Corujinha calculou</th><th>Salvo no app</th><th>Diferença</th><th>Compras</th></tr>${rows.join("")}</table>`);
       }
     } catch (e) {
