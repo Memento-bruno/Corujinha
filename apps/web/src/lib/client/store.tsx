@@ -23,6 +23,8 @@ export interface AppState {
     authConfigured: boolean;
     driveConfigured: boolean;
     pluggyConfigured: boolean;
+    /** Chaves da Pluggy existem, mas o app está público sem login: bloqueado. */
+    pluggyNeedsLogin?: boolean;
   };
   viewer: { userId: UserId; email: string | null; image: string | null; demo: boolean };
   month: MonthKey;

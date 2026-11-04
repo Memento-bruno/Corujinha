@@ -73,7 +73,11 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
         subtitle="Compras dos cartões direto do banco, via Meu Pluggy. Somente leitura."
       />
 
-      {!configured ? (
+      {state!.mode.pluggyNeedsLogin ? (
+        <p className="rounded-2xl bg-amber-50 p-3 text-xs text-amber-800">
+          Bloqueado por segurança: o app está publicado sem login. Configure o login com Google antes de conectar o banco, para que só vocês dois vejam os cartões.
+        </p>
+      ) : !configured ? (
         <p className="rounded-2xl bg-amber-50 p-3 text-xs text-amber-800">
           Falta configurar <b>PLUGGY_CLIENT_ID</b> e <b>PLUGGY_CLIENT_SECRET</b> no servidor (<code>.env.local</code> ou variáveis da Vercel). Depois reinicie o app.
         </p>
