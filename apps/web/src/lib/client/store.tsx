@@ -283,7 +283,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async ({ silent = false }: { silent?: boolean } = {}) => {
       setBankSyncing(true);
       try {
-        const r = await api<BankSyncSummary>("/api/pluggy/sync", { method: "POST", body: JSON.stringify({}) });
+        const r = await api<BankSyncSummary>("/api/pluggy/sync", { method: "POST", body: JSON.stringify({ monthsBack: 6 }) });
         for (const err of r.errors) toast(err, "error");
         const fixed = (r.updated ?? 0) + (r.removed ?? 0);
         if (r.added > 0 || r.newCards.length > 0 || fixed > 0) {

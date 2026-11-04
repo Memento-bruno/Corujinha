@@ -63,3 +63,16 @@ describe("syncPluggy", () => {
     expect((await db.getStatement(lastMonth)).data.transactions).toHaveLength(0);
   });
 });
+
+describe("clearPluggyTransactions", () => {
+  it("apaga só as compras do banco", async () => {
+    const { syncPluggy, clearPluggyTransactions } = await import("./pluggy-sync");
+    await syncPluggy(db, 3);
+    const s = await db.getStatement(thisMonth);
+    const manual = { ...s.data.transactions[0], id: "manual-1", externalId: undefined, source: "manual" as const };
+    await db.saveStatement({ ...s.data, transactions: [...s.data.transactions, manual] }, s.etag);
+    const r = await clearPluggyTransactions(db);
+    expect(r.removed).toBe(2);
+    expect((await db.getStatement(thisMonth)).data.transactions.map((t) => t.id)).toEqual(["manual-1"]);
+  });
+});

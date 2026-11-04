@@ -20,7 +20,8 @@ function formatWhen(iso?: string): string {
 
 /** Conexões Open Finance via Meu Pluggy: só leitura das faturas de cartão. */
 export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
-  const { state, updateConfig, syncBank, bankSyncing, toast } = useStore();
+  const { state, updateConfig, syncBank, bankSyncing, toast, reload } = useStore();
+  const [clearing, setClearing] = useState(false);
   const [itemId, setItemId] = useState("");
   const [owner, setOwner] = useState<UserId>(state!.viewer.userId);
   const [connecting, setConnecting] = useState(false);
@@ -62,6 +63,23 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
       toast((e as Error).message, "error");
     } finally {
       setConnecting(false);
+    }
+  };
+
+  const clearBankPurchases = async () => {
+    if (!window.confirm("Apagar todas as compras que vieram do banco? As compras que vocês lançaram à mão ficam. Depois é só sincronizar de novo.")) return;
+    setClearing(true);
+    try {
+      const res = await fetch("/api/pluggy/clear", { method: "POST" });
+      if (!res.ok) throw new Error("Não consegui apagar agora. Tente de novo.");
+      const r = (await res.json()) as { removed: number; skippedClosedMonths: string[] };
+      toast(`${r.removed} compra${r.removed === 1 ? "" : "s"} do banco apagada${r.removed === 1 ? "" : "s"}.`, "success");
+      if (r.skippedClosedMonths.length) toast(`Meses fechados não foram alterados: ${r.skippedClosedMonths.join(", ")}.`, "info");
+      await reload();
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -124,6 +142,13 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
               {bankSyncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Sincronizar agora
             </Button>
           )}
+          <button
+            className="mb-4 inline-flex w-full items-center justify-center gap-1 text-xs font-semibold text-rose-600"
+            disabled={clearing || bankSyncing}
+            onClick={() => void clearBankPurchases()}
+          >
+            {clearing ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />} Apagar compras que vieram do banco
+          </button>
           <div className="grid gap-3 sm:grid-cols-[auto_1fr] sm:items-end">
             <label className="block">
               <Label>Cartões de</Label>
