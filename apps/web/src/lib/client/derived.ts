@@ -15,6 +15,7 @@ import {
   sumCents,
 } from "../engines/analytics";
 import { RuleBasedSavingsEngine } from "../engines/savings";
+import { withPredicted } from "../engines/recurring";
 import { recurringToExpenses, settleMonth, splitAmount } from "../engines/settlement";
 import { useStore } from "./store";
 
@@ -63,10 +64,13 @@ function useDerivedOptional() {
     if (!state) return null;
     const { month, config, recurring, statements } = state;
     const cfg = config.data;
+    const debts = recurring.data.debts;
+    // Cada fatura já com as compras recorrentes de cartão previstas (as que o banco ainda não trouxe).
+    // Mês fechado fica exatamente como foi fechado.
     const byMonth: Record<MonthKey, Transaction[]> = Object.fromEntries(
-      Object.entries(statements).map(([m, s]) => [m, s.data.transactions]),
+      Object.entries(statements).map(([m, s]) => [m, s.data.snapshot ? s.data.transactions : withPredicted(debts, m, s.data.transactions)]),
     );
-    const allTxs = byMonth[month] ?? [];
+    const allTxs = byMonth[month] ?? withPredicted(debts, month, []);
     const txs = filterByView(allTxs, view);
     const prevMonth = addMonths(month, -1);
     const prevTxs = filterByView(byMonth[prevMonth] ?? [], view);
@@ -88,7 +92,6 @@ function useDerivedOptional() {
     const shares = shareOf(allTxs);
     const prevShares = shareOf(byMonth[prevMonth] ?? []);
 
-    const debts = recurring.data.debts;
     const settlement = settleMonth(month, allTxs, debts, cfg.defaultSplitPercentA);
     const prevSettlement = settleMonth(prevMonth, byMonth[prevMonth] ?? [], debts, cfg.defaultSplitPercentA);
     const recurringExpenses = recurringToExpenses(debts, month);

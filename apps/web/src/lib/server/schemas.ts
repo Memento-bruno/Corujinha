@@ -53,7 +53,7 @@ export const recurringSchema = z.object({
       z.object({
         id: z.string().min(1).max(80),
         description: shortText,
-        kind: z.enum(["CONTA_FIXA", "FINANCIAMENTO", "PARCELAMENTO", "ASSINATURA"]),
+        kind: z.enum(["BOLETO", "CONTA_FIXA", "FINANCIAMENTO", "PARCELAMENTO", "ASSINATURA", "CARTAO"]),
         amount: cents,
         paidBy: userId,
         split: splitSchema,
@@ -62,6 +62,8 @@ export const recurringSchema = z.object({
         startMonth: month,
         totalInstallments: z.number().int().min(1).max(600).optional(),
         active: z.boolean(),
+        cardId: z.string().min(1).max(80).optional(),
+        merchantKey: z.string().max(80).optional(),
       }),
     )
     .max(500),

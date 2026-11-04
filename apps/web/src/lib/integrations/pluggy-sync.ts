@@ -1,6 +1,7 @@
 import "server-only";
 import { addMonths, monthOf } from "../domain/months";
 import type { BankBill, HouseholdConfig, MonthKey, Transaction } from "../domain/types";
+import { applyCardRecurring } from "../engines/recurring";
 import { ConflictError } from "../server/blob-store";
 import type { DriveDatabaseService } from "../server/database";
 import { getBills, getCreditAccounts, getTransactions } from "./pluggy-client";
@@ -23,6 +24,7 @@ export interface SyncSummary {
  * Busca as faturas dos cartões conectados (Meu Pluggy) e grava as transações novas.
  * - Lê só contas de crédito, só leitura.
  * - Não altera transações já existentes (as divisões e tags que o casal editou ficam).
+ * - Compras novas de uma recorrente de cartão já chegam com a divisão e o setor dela.
  * - Não mexe em meses já fechados.
  */
 export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Promise<SyncSummary> {
@@ -105,12 +107,13 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   // Meses antigos entram só para limpar compras de conexões removidas.
   for (const m of await db.listStatementMonths()) months.add(m);
   const itemIds = new Set(items.map((i) => i.itemId));
+  const debts = (await db.getRecurring()).data.debts;
   const allClean = summary.errors.length === 0;
   // Compra do banco de uma conexão que não existe mais (ou de cartão que nenhuma conexão trouxe).
   const isOrphan = (t: Transaction) =>
     allClean && t.source === "pluggy" && (t.pluggyItemId ? !itemIds.has(t.pluggyItemId) : !syncedCardIds.has(t.cardId));
   for (const month of [...months].sort()) {
-    const incoming = byMonth.get(month) ?? [];
+    const incoming = (byMonth.get(month) ?? []).map((t) => applyCardRecurring(debts, t));
     for (let attempt = 0; attempt < 3; attempt++) {
       const cur = await db.getStatement(month);
       if (cur.data.snapshot) {

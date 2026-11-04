@@ -52,7 +52,7 @@ export function FaturasView() {
         className="w-full justify-between [&>button]:flex-1"
         options={[
           { value: "transacoes", label: "Transações" },
-          { value: "recorrentes", label: "Recorrentes" },
+          { value: "recorrentes", label: "Boletos e fixas" },
           { value: "importar", label: "Importar" },
         ]}
       />

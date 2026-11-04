@@ -24,6 +24,7 @@ import type {
   UserId,
 } from "../domain/types";
 import { monthDiff } from "../domain/months";
+import { withPredicted } from "./recurring";
 
 export class SplitValidationError extends Error {
   constructor(message: string) {
@@ -93,9 +94,10 @@ export function isDebtActiveIn(debt: RecurringDebt, month: MonthKey): boolean {
   return true;
 }
 
+/** Contas pagas fora do cartão (boleto, débito...). Recorrentes de cartão viram compras previstas na fatura. */
 export function recurringToExpenses(debts: RecurringDebt[], month: MonthKey): Expense[] {
   return debts
-    .filter((d) => isDebtActiveIn(d, month))
+    .filter((d) => d.kind !== "CARTAO" && isDebtActiveIn(d, month))
     .map((d) => ({
       id: `recurring:${d.id}`,
       description: d.description,
@@ -147,7 +149,10 @@ export function settle(expenses: Expense[], defaultPercentA: number): Settlement
   return { grossTotal, paid, fairShare, credits, crossOffset, transfer };
 }
 
-/** Atalho: encontro de contas de um mês a partir das transações e das recorrentes. */
+/**
+ * Atalho: encontro de contas de um mês a partir das transações e das recorrentes.
+ * Compras recorrentes de cartão que o banco ainda não trouxe entram com o valor previsto.
+ */
 export function settleMonth(
   month: MonthKey,
   transactions: Transaction[],
@@ -155,7 +160,7 @@ export function settleMonth(
   defaultPercentA: number,
 ): SettlementResult {
   return settle(
-    [...transactionsToExpenses(transactions), ...recurringToExpenses(debts, month)],
+    [...transactionsToExpenses(withPredicted(debts, month, transactions)), ...recurringToExpenses(debts, month)],
     defaultPercentA,
   );
 }
