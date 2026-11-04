@@ -83,3 +83,58 @@ describe("configSchema", () => {
     expect(configSchema.safeParse({ ...cfg, pluggyItems: [{ itemId: "nope", owner: "USER_A" }] }).success).toBe(false);
   });
 });
+
+describe("valores e pagamentos", () => {
+  it("usa o valor em reais nas compras internacionais", async () => {
+    const { brlAmount } = await import("./pluggy-map");
+    expect(brlAmount(tx("x", 10, { amountInAccountCurrency: 54.3, currencyCode: "USD" }))).toBe(54.3);
+    expect(brlAmount(tx("y", 10))).toBe(10);
+    const out = mapCardTransactions([tx("x", 10, { amountInAccountCurrency: 54.3, currencyCode: "USD" })], card, [], []);
+    expect(out.get("2026-10")![0].amount).toBe(5430);
+  });
+
+  it("reconhece pagamento da fatura pela categoria e por descrições comuns", async () => {
+    const { isCardPayment } = await import("./pluggy-map");
+    expect(isCardPayment(tx("a", -900, { category: "Credit card payment", description: "PAGAMENTO" }))).toBe(true);
+    expect(isCardPayment(tx("b", -900, { description: "PAG FATURA CARTAO" }))).toBe(true);
+    expect(isCardPayment(tx("c", -900, { description: "DEB AUTOM FATURA" }))).toBe(true);
+    expect(isCardPayment(tx("d", 50, { description: "PAG*JOSEDASILVA" }))).toBe(false);
+    expect(isCardPayment(tx("e", 50, { description: "IFOOD *RESTAURANTE" }))).toBe(false);
+  });
+});
+
+describe("parcelas sem fatura vinculada", () => {
+  it("joga a parcela N para N-1 meses depois da compra", () => {
+    const out = mapCardTransactions(
+      [tx("p", 100, { date: "2026-03-10T00:00:00Z", creditCardMetadata: { installmentNumber: 8, totalInstallments: 10 } })],
+      card,
+      [],
+      [],
+    );
+    expect([...out.keys()]).toEqual(["2026-10"]);
+  });
+});
+
+describe("reconcile", () => {
+  it("corrige valor, mantém edições, remove o que sumiu e ignora o que não é do banco", async () => {
+    const { reconcile } = await import("./pluggy-map");
+    const [a, b] = mapCardTransactions([tx("a", 10), tx("b", 20)], card, [], []).get("2026-10")!;
+    const manual: Transaction = { ...a, id: "m1", externalId: undefined, source: "manual" };
+    const existing: Transaction[] = [{ ...a, amount: 999, split: { type: "INDIVIDUAL_B" }, category: "pets" }, b, manual];
+    const incoming = mapCardTransactions([tx("a", 10), tx("c", 30)], card, [], []).get("2026-10")!;
+    const r = reconcile(existing, incoming, new Set([card.id]));
+    expect(r).toMatchObject({ added: 1, updated: 1, removed: 1 });
+    const fixedA = r.merged.find((t) => t.externalId === "pluggy:a")!;
+    expect(fixedA).toMatchObject({ amount: 1000, split: { type: "INDIVIDUAL_B" }, category: "pets" });
+    expect(r.merged.some((t) => t.externalId === "pluggy:b")).toBe(false);
+    expect(r.merged.some((t) => t.id === "m1")).toBe(true);
+  });
+
+  it("não remove compras de um cartão que não sincronizou", async () => {
+    const { reconcile } = await import("./pluggy-map");
+    const existing = mapCardTransactions([tx("a", 10)], card, [], []).get("2026-10")!;
+    const r = reconcile(existing, [], new Set());
+    expect(r.removed).toBe(0);
+    expect(r.merged).toHaveLength(1);
+  });
+});

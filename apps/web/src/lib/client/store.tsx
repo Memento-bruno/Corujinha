@@ -72,6 +72,8 @@ const AUTO_SYNC_MS = 6 * 60 * 60 * 1000;
 
 export interface BankSyncSummary {
   added: number;
+  updated: number;
+  removed: number;
   months: Record<MonthKey, number>;
   skippedClosedMonths: MonthKey[];
   newCards: string[];
@@ -283,14 +285,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
       try {
         const r = await api<BankSyncSummary>("/api/pluggy/sync", { method: "POST", body: JSON.stringify({}) });
         for (const err of r.errors) toast(err, "error");
-        if (r.added > 0 || r.newCards.length > 0) {
+        const fixed = (r.updated ?? 0) + (r.removed ?? 0);
+        if (r.added > 0 || r.newCards.length > 0 || fixed > 0) {
           const parts = [`${r.added} compra${r.added === 1 ? "" : "s"} nova${r.added === 1 ? "" : "s"} do banco`];
+          if (fixed) parts.push(`${fixed} corrigida${fixed === 1 ? "" : "s"}`);
           if (r.newCards.length) parts.push(`cartão novo: ${r.newCards.join(", ")}`);
           toast(parts.join(" · ") + ".", "success");
         } else if (!silent && r.errors.length === 0) {
           toast(`Tudo em dia: ${r.accounts} cartão(ões) conferido(s), nada novo.`, "info");
         }
-        if (r.added > 0 || r.newCards.length > 0 || !silent) await reload();
+        if (r.added > 0 || r.newCards.length > 0 || fixed > 0 || !silent) await reload();
         if (r.skippedClosedMonths.length && !silent) {
           toast(`Meses fechados não foram alterados: ${r.skippedClosedMonths.join(", ")}.`, "info");
         }
