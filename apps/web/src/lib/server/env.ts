@@ -101,6 +101,16 @@ export function userIdForEmail(email: string | null | undefined): UserId | null 
   return null;
 }
 
+/**
+ * Open Finance só liga se as chaves existirem E, quando o app está publicado (Vercel),
+ * o login Google estiver configurado. Sem login, um endereço público mostraria os
+ * cartões reais para qualquer pessoa com o link.
+ */
 export function isPluggyConfigured(): boolean {
-  return Boolean(env.pluggyClientId && env.pluggyClientSecret);
+  return Boolean(env.pluggyClientId && env.pluggyClientSecret) && !isPluggyBlockedByMissingLogin();
+}
+
+/** Chaves da Pluggy presentes, mas o app está público sem login: bloqueado por segurança. */
+export function isPluggyBlockedByMissingLogin(): boolean {
+  return Boolean(env.pluggyClientId && env.pluggyClientSecret) && Boolean(process.env.VERCEL) && !isAuthConfigured();
 }
