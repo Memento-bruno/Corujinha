@@ -14,6 +14,8 @@ export default auth((req) => {
     pathname.startsWith("/login") ||
     pathname === "/privacidade" ||
     pathname.startsWith("/api/auth") ||
+    // Chamado pelos servidores da Pluggy; protegido por segredo próprio na URL.
+    pathname === "/api/webhooks/pluggy" ||
     pathname === "/manifest.webmanifest" ||
     pathname === "/sw.js";
   if (isPublic) return NextResponse.next();

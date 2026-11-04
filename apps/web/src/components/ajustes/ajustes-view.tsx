@@ -13,6 +13,7 @@ import { Card, CardHeader } from "../ui/card";
 import { Input, Label, Select } from "../ui/field";
 import { IconBox } from "../ui/icon-box";
 import { Sheet } from "../ui/sheet";
+import { OpenFinanceCard } from "./open-finance-card";
 
 function MoneyField({ value, onCommit, disabled }: { value: number; onCommit: (c: number) => void; disabled?: boolean }) {
   const [text, setText] = useState(formatBRL(value));
@@ -85,6 +86,8 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
           )}
         </div>
       </Card>
+
+      <OpenFinanceCard config={cfg} />
 
       <Card>
         <CardHeader icon={<IconBox><Users /></IconBox>} title="Casal e divisão padrão" />

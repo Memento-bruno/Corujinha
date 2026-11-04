@@ -22,6 +22,7 @@ export interface AppState {
     encrypted: boolean;
     authConfigured: boolean;
     driveConfigured: boolean;
+    pluggyConfigured: boolean;
   };
   viewer: { userId: UserId; email: string | null; image: string | null; demo: boolean };
   month: MonthKey;
@@ -54,6 +55,9 @@ interface Store {
   updateConfig: (fn: (c: HouseholdConfig) => HouseholdConfig) => Promise<void>;
   updateRecurring: (fn: (r: RecurringDebtsFile) => RecurringDebtsFile) => Promise<void>;
   closeMonth: (month: MonthKey, reopen?: boolean) => Promise<void>;
+  /** Busca as faturas no Open Finance (Meu Pluggy). `silent` não mostra aviso quando nada mudou. */
+  syncBank: (opts?: { silent?: boolean }) => Promise<void>;
+  bankSyncing: boolean;
   toasts: Toast[];
   toast: (message: string, tone?: Toast["tone"]) => void;
 }
@@ -61,6 +65,17 @@ interface Store {
 const Ctx = createContext<Store | null>(null);
 
 const PRIVACY_KEY = "corujinha:privacy";
+/** Sincroniza sozinho ao abrir o app se a última busca tiver mais de 6h. */
+const AUTO_SYNC_MS = 6 * 60 * 60 * 1000;
+
+export interface BankSyncSummary {
+  added: number;
+  months: Record<MonthKey, number>;
+  skippedClosedMonths: MonthKey[];
+  newCards: string[];
+  accounts: number;
+  errors: string[];
+}
 
 class HttpError extends Error {
   constructor(
@@ -92,6 +107,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [privacy, setPrivacyState] = useState(false);
   const [view, setView] = useState<ViewFilter>("COUPLE");
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [bankSyncing, setBankSyncing] = useState(false);
+  const autoSynced = useRef(false);
   const stateRef = useRef<AppState | null>(null);
   stateRef.current = state;
   // Fila de gravações: garante que cada gravação use o ETag mais recente.
@@ -258,6 +275,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [enqueue, handleError, toast],
   );
 
+  const syncBank = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      setBankSyncing(true);
+      try {
+        const r = await api<BankSyncSummary>("/api/pluggy/sync", { method: "POST", body: JSON.stringify({}) });
+        for (const err of r.errors) toast(err, "error");
+        if (r.added > 0 || r.newCards.length > 0) {
+          const parts = [`${r.added} compra${r.added === 1 ? "" : "s"} nova${r.added === 1 ? "" : "s"} do banco`];
+          if (r.newCards.length) parts.push(`cartão novo: ${r.newCards.join(", ")}`);
+          toast(parts.join(" · ") + ".", "success");
+        } else if (!silent && r.errors.length === 0) {
+          toast(`Tudo em dia: ${r.accounts} cartão(ões) conferido(s), nada novo.`, "info");
+        }
+        if (r.added > 0 || r.newCards.length > 0 || !silent) await reload();
+        if (r.skippedClosedMonths.length && !silent) {
+          toast(`Meses fechados não foram alterados: ${r.skippedClosedMonths.join(", ")}.`, "info");
+        }
+      } catch (e) {
+        if (!silent) toast((e as Error).message, "error");
+      } finally {
+        setBankSyncing(false);
+      }
+    },
+    [reload, toast],
+  );
+
+  useEffect(() => {
+    if (!state || autoSynced.current) return;
+    autoSynced.current = true;
+    const cfg = state.config.data;
+    if (!state.mode.pluggyConfigured || !cfg.pluggyItems?.length) return;
+    const last = cfg.pluggyLastSyncAt ? Date.parse(cfg.pluggyLastSyncAt) : 0;
+    if (Date.now() - last > AUTO_SYNC_MS) void syncBank({ silent: true });
+  }, [state, syncBank]);
+
   const value = useMemo<Store>(
     () => ({
       state,
@@ -274,10 +326,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateConfig,
       updateRecurring,
       closeMonth,
+      syncBank,
+      bankSyncing,
       toasts,
       toast,
     }),
-    [state, error, sync, month, setMonth, privacy, setPrivacy, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, toasts, toast],
+    [state, error, sync, month, setMonth, privacy, setPrivacy, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, syncBank, bankSyncing, toasts, toast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

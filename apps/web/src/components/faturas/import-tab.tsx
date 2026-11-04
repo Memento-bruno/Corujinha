@@ -1,6 +1,7 @@
 "use client";
 
-import { FileSpreadsheet, FileText, FileUp, Loader2, ShieldCheck } from "lucide-react";
+import { FileSpreadsheet, FileText, FileUp, Landmark, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { useDerived, useFmt } from "@/lib/client/derived";
 import { api, useStore } from "@/lib/client/store";
@@ -13,7 +14,8 @@ import { IconBox } from "../ui/icon-box";
 import { Switch } from "../ui/switch";
 
 export function ImportTab() {
-  const { setMonth, toast } = useStore();
+  const { state, setMonth, toast, syncBank, bankSyncing } = useStore();
+  const bankReady = state!.mode.pluggyConfigured && (state!.config.data.pluggyItems?.length ?? 0) > 0;
   const d = useDerived();
   const [cardId, setCardId] = useState(d.config.cards[0]?.id ?? "");
   const [month, setTargetMonth] = useState(d.month);
@@ -65,6 +67,24 @@ export function ImportTab() {
 
   return (
     <div className="space-y-3">
+      <Card>
+        <CardHeader
+          icon={<IconBox><Landmark /></IconBox>}
+          title="Direto do banco"
+          subtitle={bankReady ? "Compras novas via Open Finance" : "Conecte o Meu Pluggy em Ajustes"}
+          action={
+            bankReady ? (
+              <Button size="sm" disabled={bankSyncing} onClick={() => void syncBank()}>
+                {bankSyncing ? <Loader2 className="animate-spin" /> : <RefreshCw />} Sincronizar
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" asChild>
+                <Link href="/ajustes#open-finance">Configurar</Link>
+              </Button>
+            )
+          }
+        />
+      </Card>
       <Card>
         <CardHeader icon={<IconBox><FileUp /></IconBox>} title="Importar fatura" subtitle="CSV, OFX ou PDF do app do banco" />
         <div className="grid gap-3 sm:grid-cols-2">

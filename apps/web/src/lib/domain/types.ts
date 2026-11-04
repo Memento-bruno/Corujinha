@@ -89,7 +89,16 @@ export interface HouseholdConfig {
   savingsRules: SavingsRulesConfig;
   /** Estabelecimentos marcados pelo casal como assinatura (merchantKey). */
   subscriptionMerchants: string[];
+  /** Conexões Open Finance (Meu Pluggy). O itemId sozinho não dá acesso a nada sem o client secret. */
+  pluggyItems?: PluggyItemLink[];
+  pluggyLastSyncAt?: string;
   updatedAt: string;
+}
+
+export interface PluggyItemLink {
+  itemId: string;
+  /** De quem são os cartões dessa conexão. */
+  owner: UserId;
 }
 
 export interface SavingsRulesConfig {
@@ -122,6 +131,8 @@ export interface Transaction {
   split: Split;
   installment?: Installment;
   source: TransactionSource;
+  /** Id da transação no provedor (ex.: Pluggy), para não importar duas vezes. */
+  externalId?: string;
 }
 
 export type RecurringKind = "CONTA_FIXA" | "FINANCIAMENTO" | "PARCELAMENTO" | "ASSINATURA";
