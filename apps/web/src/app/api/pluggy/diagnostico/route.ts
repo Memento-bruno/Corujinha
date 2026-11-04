@@ -63,18 +63,27 @@ export async function GET() {
         for (const [m, list] of mapped) for (const t of list) monthOfTx.set(t.id, m);
         const billMonth = new Map(bills.map((b) => [b.id, b.dueDate.slice(0, 7)]));
         const nowMonth = monthOf(new Date());
-        const instRows = txs
-          .filter((t) => (t.creditCardMetadata?.totalInstallments ?? 0) > 1 && (monthOfTx.get(`plg-${t.id}`) ?? "") >= nowMonth)
-          .map((t) => {
-            const meta = t.creditCardMetadata!;
-            const linked = meta.billId ? (billMonth.get(meta.billId) ?? "fatura não listada") : "sem fatura";
-            return { m: monthOfTx.get(`plg-${t.id}`)!, html: `<tr><td>${esc((t.description || "").slice(0, 28))}</td><td>${meta.installmentNumber}/${meta.totalInstallments}</td><td>${t.date.slice(0, 10)}</td><td>${(meta.purchaseDate ?? "—").slice(0, 10)}</td><td>${esc(linked)}</td><td>${monthOfTx.get(`plg-${t.id}`)}</td><td>${formatBRL(Math.round(Math.abs(brlAmount(t)) * 100))}</td></tr>` };
-          })
-          .sort((a, b) => a.m.localeCompare(b.m))
-          .map((r) => r.html);
-        const instTable = instRows.length
-          ? `<h3>Parcelas de ${nowMonth} em diante</h3><table><tr><th>Compra</th><th>Parcela</th><th>Data</th><th>Data da compra</th><th>Fatura do banco</th><th>Mês no app</th><th>Valor</th></tr>${instRows.join("")}</table>`
-          : "";
+        // Compras que o app pôs num mês diferente da fatura informada pelo banco (deveria ser nenhuma).
+        const movedRows = txs
+          .filter((t) => t.creditCardMetadata?.billId && billMonth.has(t.creditCardMetadata.billId))
+          .filter((t) => monthOfTx.has(`plg-${t.id}`) && monthOfTx.get(`plg-${t.id}`) !== billMonth.get(t.creditCardMetadata!.billId!))
+          .slice(0, 50)
+          .map((t) => `<tr><td>${esc((t.description || "").slice(0, 28))}</td><td>${billMonth.get(t.creditCardMetadata!.billId!)}</td><td>${monthOfTx.get(`plg-${t.id}`)}</td><td>${formatBRL(Math.round(Math.abs(brlAmount(t)) * 100))}</td></tr>`);
+        // Mês atual em diante: o que é compra real (aberta) e o que é parcela prevista.
+        const future = [...mapped.entries()].filter(([m]) => m >= nowMonth).sort(([a], [b]) => a.localeCompare(b));
+        const futureRows = future.map(([m, list]) => {
+          const prev = list.filter((t) => t.tags.includes("Prevista"));
+          const real = list.filter((t) => !t.tags.includes("Prevista"));
+          const sum = (l: typeof list) => formatBRL(l.reduce((s, t) => s + t.amount, 0));
+          return `<tr><td>${m}</td><td>${sum(real)} (${real.length})</td><td>${sum(prev)} (${prev.length})</td><td>${sum(list)}</td></tr>`;
+        });
+        const instTable =
+          (futureRows.length
+            ? `<h3>Faturas de ${nowMonth} em diante</h3><table><tr><th>Mês</th><th>Compras já lançadas</th><th>Parcelas previstas</th><th>Total</th></tr>${futureRows.join("")}</table>`
+            : "") +
+          (movedRows.length
+            ? `<h3>Compras fora da fatura do banco</h3><table><tr><th>Compra</th><th>Fatura do banco</th><th>Mês no app</th><th>Valor</th></tr>${movedRows.join("")}</table>`
+            : "");
         parts.push(`<h2>${esc(card.nickname)} •${last4Of(account.number) ?? "????"}</h2>
 <p>${txs.length} lançamentos desde ${dates[0] ?? "-"} · sinal ${expenseSign(txs) === 1 ? "positivo" : "invertido"} (${sumPos} positivos) · ${payments} pagamentos de fatura ignorados · ${pending} pendentes · ${foreign} em moeda estrangeira · ${installments} parcelados · ${noBill} sem fatura vinculada · ${bills.length} faturas informadas pelo banco · finais de cartão nas compras: ${cardFinals.length ? cardFinals.map((f) => "•" + f).join(", ") : "não informados"}</p>
 <table><tr><th>Fatura</th><th>Banco</th><th>Corujinha calculou</th><th>Salvo no app</th><th>Diferença</th><th>Compras</th></tr>${rows.join("")}</table>${instTable}`);

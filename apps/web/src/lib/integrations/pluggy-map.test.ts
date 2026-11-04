@@ -30,7 +30,7 @@ describe("pluggy-map", () => {
     expect(expenseSign([tx("1", -10), tx("2", -20), tx("3", 5)])).toBe(-1);
   });
 
-  it("converte para centavos positivos, ignora pendentes e pagamento de fatura", () => {
+  it("converte para centavos positivos, inclui pendentes e ignora pagamento de fatura", () => {
     const out = mapCardTransactions(
       [
         tx("a", -12.34),
@@ -46,6 +46,7 @@ describe("pluggy-map", () => {
     const list = out.get("2026-10")!;
     expect(list.map((t) => [t.externalId, t.amount])).toEqual([
       ["pluggy:a", 1234],
+      ["pluggy:b", 5000],
       ["pluggy:d", 750],
       ["pluggy:e", -300],
     ]);
@@ -111,7 +112,8 @@ describe("parcelas sem fatura vinculada", () => {
       [],
       [],
     );
-    expect([...out.keys()]).toEqual(["2026-10"]);
+    expect([...out.keys()]).toEqual(["2026-10", "2026-11", "2026-12"]);
+    expect(out.get("2026-12")![0]).toMatchObject({ installment: { current: 10, total: 10 }, tags: ["Prevista"] });
   });
 });
 
@@ -162,15 +164,20 @@ describe("faturas futuras", () => {
     { id: "b9", dueDate: "2026-09-10" },
     { id: "b10", dueDate: "2026-10-10" },
   ];
-  it("espalha parcelas futuras que o banco ligou à mesma fatura", () => {
+  it("respeita a fatura do banco mesmo com parcelas antecipadas e prevê as próximas", () => {
     const parc = (n: number) =>
       tx(`tv${n}`, 300, {
         description: "TV LOJA",
         date: "2026-08-20T00:00:00Z",
-        creditCardMetadata: { installmentNumber: n, totalInstallments: 4, billId: n <= 2 ? `b${8 + n}` : "b10" },
+        creditCardMetadata: { installmentNumber: n, totalInstallments: 6, billId: n === 1 ? "b9" : "b10" },
       });
-    const out = mapCardTransactions([1, 2, 3, 4].map(parc), card, bills, []);
-    expect([...out.keys()].sort()).toEqual(["2026-09", "2026-10", "2026-11", "2026-12"]);
+    const out = mapCardTransactions([1, 2, 3].map(parc), card, bills, []);
+    const sum = (m: string) => (out.get(m) ?? []).reduce((s, t) => s + t.amount, 0);
+    expect(sum("2026-09")).toBe(30000);
+    expect(sum("2026-10")).toBe(60000);
+    expect(out.get("2026-11")!.map((t) => t.installment!.current)).toEqual([4]);
+    expect(out.get("2026-13" as never)).toBeUndefined();
+    expect(out.get("2027-01")!.map((t) => t.externalId)).toEqual(["pluggy:tv3:p6"]);
   });
   it("põe compras da fatura aberta no próximo vencimento, pelo dia de fechamento", () => {
     const out = mapCardTransactions(

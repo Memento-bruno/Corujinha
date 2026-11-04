@@ -89,10 +89,12 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
       if (!(e instanceof ConflictError) || attempt === 2) throw e;
     }
   }
-  // Passa por todos os meses da janela (inclusive os que ficaram vazios), até 12 meses à frente (parcelas futuras).
-  const lastMonth = addMonths(monthOf(new Date()), 12);
+  // Passa por todos os meses da janela (inclusive os que ficaram vazios), até 2 meses à frente.
+  const lastMonth = addMonths(monthOf(new Date()), 2);
   const months = new Set<MonthKey>(byMonth.keys());
   for (let m = firstMonth; m <= lastMonth; m = addMonths(m, 1)) months.add(m);
+  // E os meses já salvos (ex.: parcelas previstas lá na frente), para limpar o que mudou.
+  for (const m of await db.listStatementMonths()) if (m >= firstMonth) months.add(m);
   for (const month of [...months].sort()) {
     const incoming = byMonth.get(month) ?? [];
     for (let attempt = 0; attempt < 3; attempt++) {

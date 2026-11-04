@@ -173,12 +173,16 @@ interface Draft {
   billMonth?: MonthKey;
 }
 
+const PROJECTED_TAG = "Prevista";
+
 /**
  * Converte as transações de UMA conta de cartão em transações do Corujinha, agrupadas por mês da fatura.
- * - Compra com fatura vinculada vai para o mês de vencimento dessa fatura.
- * - Parcelas da mesma compra ficam uma em cada fatura, contando a partir de uma parcela já faturada
- *   (o banco às vezes liga todas as parcelas futuras à fatura atual).
- * - Sem fatura vinculada, estimamos pelo dia de fechamento visto nas faturas anteriores.
+ * - Compra com fatura vinculada vai sempre para o mês de vencimento dessa fatura (o banco manda; às vezes
+ *   ele antecipa várias parcelas numa fatura só).
+ * - Compras da fatura aberta (pendentes ou sem fatura) vão para o vencimento estimado pelo dia de fechamento.
+ *   Parcelas sem fatura seguem a sequência de uma parcela da mesma compra que já tem fatura.
+ * - As parcelas que o banco ainda não lançou entram como "Prevista" nos meses seguintes, para as faturas
+ *   futuras baterem com o app do banco. Somem sozinhas quando a parcela real chega.
  */
 export function mapCardTransactions(
   txs: PluggyTransaction[],
@@ -191,7 +195,6 @@ export function mapCardTransactions(
   const billMonth = new Map(bills.map((b) => [b.id, monthOfIso(b.dueDate)]));
   const drafts: Draft[] = [];
   for (const t of txs) {
-    if ((t.status ?? "POSTED").toUpperCase() === "PENDING") continue;
     const rawDesc = t.merchant?.name || t.description || t.descriptionRaw || "";
     if (!rawDesc || isCardPayment(t)) continue;
     const cents = Math.round(brlAmount(t) * 100) * sign;
@@ -239,16 +242,16 @@ export function mapCardTransactions(
     groups.set(k, [...(groups.get(k) ?? []), d]);
   }
   const monthOfDraft = new Map<Draft, MonthKey>();
+  for (const d of drafts) {
+    if (d.billMonth) monthOfDraft.set(d, d.billMonth);
+    else if (!d.tx.installment) monthOfDraft.set(d, estimate(d.tx.date));
+  }
   for (const list of groups.values()) {
-    // Âncora: a menor parcela ligada a cada fatura (as demais ligadas à mesma fatura são futuras).
-    const perBill = new Map<MonthKey, Draft>();
+    const anchor = list
+      .filter((d) => d.billMonth)
+      .sort((a, b) => b.tx.installment!.current - a.tx.installment!.current || b.billMonth!.localeCompare(a.billMonth!))[0];
     for (const d of list) {
-      if (!d.billMonth) continue;
-      const cur = perBill.get(d.billMonth);
-      if (!cur || d.tx.installment!.current < cur.tx.installment!.current) perBill.set(d.billMonth, d);
-    }
-    const anchor = [...perBill.values()].sort((a, b) => a.tx.installment!.current - b.tx.installment!.current)[0];
-    for (const d of list) {
+      if (d.billMonth) continue;
       const n = d.tx.installment!.current;
       monthOfDraft.set(
         d,
@@ -258,9 +261,29 @@ export function mapCardTransactions(
   }
 
   const out = new Map<MonthKey, Transaction[]>();
-  for (const d of drafts) {
-    const month = monthOfDraft.get(d) ?? d.billMonth ?? estimate(d.tx.date);
-    out.set(month, [...(out.get(month) ?? []), d.tx]);
+  const push = (month: MonthKey, tx: Transaction) => out.set(month, [...(out.get(month) ?? []), tx]);
+  for (const d of drafts) push(monthOfDraft.get(d)!, d.tx);
+
+  // Parcelas futuras que o banco ainda não mandou.
+  const seen = new Set(
+    drafts.filter((d) => d.tx.installment).map((d) => [d.tx.cardId, d.tx.merchantKey, d.tx.installment!.total, d.tx.installment!.current].join("|")),
+  );
+  for (const list of groups.values()) {
+    const last = list.reduce((a, b) => (b.tx.installment!.current > a.tx.installment!.current ? b : a));
+    const { current, total } = last.tx.installment!;
+    const base = monthOfDraft.get(last)!;
+    for (let n = current + 1; n <= Math.min(total, current + 36); n++) {
+      const k = [last.tx.cardId, last.tx.merchantKey, total, n].join("|");
+      if (seen.has(k)) continue;
+      seen.add(k);
+      push(addMonths(base, n - current), {
+        ...last.tx,
+        id: `${last.tx.id}-p${n}`,
+        externalId: `${last.tx.externalId}:p${n}`,
+        installment: { current: n, total },
+        tags: [...last.tx.tags, PROJECTED_TAG],
+      });
+    }
   }
   return out;
 }
