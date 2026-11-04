@@ -8,8 +8,10 @@ export function SyncBadge({ className }: { className?: string }) {
   const { sync, state } = useStore();
   const drive = state?.mode.storage === "drive";
   const label =
-    sync === "saving" || sync === "loading"
-      ? "Sincronizando…"
+    sync === "saving"
+      ? "Salvando…"
+      : sync === "loading"
+        ? "Carregando…"
       : sync === "error"
         ? "Erro ao salvar"
         : sync === "conflict"

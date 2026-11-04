@@ -8,6 +8,7 @@ import type {
   StatementFile,
   UserId,
 } from "../domain/types";
+import { monthRange } from "../domain/months";
 import type { ViewFilter } from "../engines/analytics";
 
 interface Versioned<T> {
@@ -62,6 +63,8 @@ interface Store {
   /** Busca as faturas no Open Finance (Meu Pluggy). `silent` não mostra aviso quando nada mudou. */
   syncBank: (opts?: { silent?: boolean }) => Promise<void>;
   bankSyncing: boolean;
+  /** Primeira busca no banco (só acontece uma vez, na primeira abertura): a tela de carregamento espera por ela. */
+  firstSync: boolean;
   toasts: Toast[];
   toast: (message: string, tone?: Toast["tone"]) => void;
 }
@@ -69,8 +72,6 @@ interface Store {
 const Ctx = createContext<Store | null>(null);
 
 const PRIVACY_KEY = "corujinha:privacy";
-/** Sincroniza sozinho ao abrir o app se a última busca tiver mais de 6h. */
-const AUTO_SYNC_MS = 6 * 60 * 60 * 1000;
 
 export interface BankSyncSummary {
   added: number;
@@ -114,6 +115,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [view, setView] = useState<ViewFilter>("COUPLE");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [bankSyncing, setBankSyncing] = useState(false);
+  const [firstSync, setFirstSync] = useState(false);
   const autoSynced = useRef(false);
   const stateRef = useRef<AppState | null>(null);
   stateRef.current = state;
@@ -143,11 +145,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const load = useCallback(async (m?: MonthKey | null) => {
+  /** `keep` mantém os meses já lidos (troca de mês); recarregar busca tudo de novo. */
+  const load = useCallback(async (m?: MonthKey | null, keep = false) => {
     setSync("loading");
     try {
       const s = await api<AppState>(`/api/state${m ? `?month=${m}` : ""}`);
-      setState(s);
+      // Guarda os meses já lidos: trocar de mês depois não precisa ir ao Drive de novo.
+      setState((prev) => (prev && keep ? { ...s, statements: { ...prev.statements, ...s.statements } } : s));
       setMonthState(s.month);
       setError(null);
       setSync("synced");
@@ -167,7 +171,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(() => load(stateRef.current?.month), [load]);
 
-  const setMonth = useCallback((m: MonthKey) => void load(m), [load]);
+  /** Troca de mês usando o que já foi carregado; só busca no Drive os meses que ainda não temos. */
+  const setMonth = useCallback(
+    (m: MonthKey) => {
+      const cur = stateRef.current;
+      if (cur && monthRange(m, 6).every((k) => cur.statements[k])) {
+        setState((s) => (s ? { ...s, month: m } : s));
+        setMonthState(m);
+        return;
+      }
+      void load(m, true);
+    },
+    [load],
+  );
 
   const enqueue = useCallback(
     <T,>(job: () => Promise<T>): Promise<T> => {
@@ -309,13 +325,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [reload, toast],
   );
 
+  // Busca a fatura no banco sozinho só na primeira vez (nunca sincronizado).
+  // Depois disso o app usa o que já está salvo; para buscar compras novas há o botão "Sincronizar".
   useEffect(() => {
     if (!state || autoSynced.current) return;
     autoSynced.current = true;
     const cfg = state.config.data;
-    if (!state.mode.pluggyConfigured || !cfg.pluggyItems?.length) return;
-    const last = cfg.pluggyLastSyncAt ? Date.parse(cfg.pluggyLastSyncAt) : 0;
-    if (Date.now() - last > AUTO_SYNC_MS) void syncBank({ silent: true });
+    if (!state.mode.pluggyConfigured || !cfg.pluggyItems?.length || cfg.pluggyLastSyncAt) return;
+    setFirstSync(true);
+    void syncBank({ silent: true }).finally(() => setFirstSync(false));
   }, [state, syncBank]);
 
   const value = useMemo<Store>(
@@ -336,10 +354,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       closeMonth,
       syncBank,
       bankSyncing,
+      firstSync,
       toasts,
       toast,
     }),
-    [state, error, sync, month, setMonth, privacy, setPrivacy, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, syncBank, bankSyncing, toasts, toast],
+    [state, error, sync, month, setMonth, privacy, setPrivacy, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, syncBank, bankSyncing, firstSync, toasts, toast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

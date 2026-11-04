@@ -1,10 +1,11 @@
 "use client";
 
 import { Loader2, ShieldCheck } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AppProvider, useStore } from "@/lib/client/store";
 import { BottomNav } from "./bottom-nav";
 import { Header } from "./header";
+import { LoadingScreen } from "./loading-screen";
 import { Toasts } from "./toasts";
 
 function Body({ children }: { children: React.ReactNode }) {
@@ -45,6 +46,21 @@ function Body({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Tela de carregamento a cada abertura do app; na primeira vez, espera também a fatura chegar do banco. */
+function Splash() {
+  const { state, error, firstSync } = useStore();
+  const [show, setShow] = useState(true);
+  if (!show || error) return null;
+  return (
+    <LoadingScreen
+      ready={!!state && !firstSync}
+      slow={firstSync}
+      message={firstSync ? "Buscando sua fatura no banco…" : "Carregando suas faturas…"}
+      onDone={() => setShow(false)}
+    />
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
@@ -53,6 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
   return (
     <AppProvider>
+      <Splash />
       <Toasts />
       <div className="mx-auto w-full max-w-6xl px-4 pb-32 sm:px-6">
         <Body>{children}</Body>
