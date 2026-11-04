@@ -29,6 +29,8 @@ export interface AppState {
   viewer: { userId: UserId; email: string | null; image: string | null; demo: boolean };
   month: MonthKey;
   availableMonths: MonthKey[];
+  /** Mês da fatura em aberto (onde o app abre). */
+  openMonth?: MonthKey;
   config: Versioned<HouseholdConfig>;
   recurring: Versioned<RecurringDebtsFile>;
   statements: Record<MonthKey, Versioned<StatementFile>>;

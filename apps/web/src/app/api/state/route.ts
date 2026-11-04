@@ -11,6 +11,20 @@ function currentMonthBR(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit" }).format(new Date()).slice(0, 7);
 }
 
+/**
+ * Fatura em aberto: o mês seguinte à última fatura que o banco já fechou (pelo Open Finance),
+ * nunca antes do mês atual. Ex.: em novembro, com a fatura de novembro fechada, abre dezembro.
+ * Sem banco conectado, é o mês atual.
+ */
+async function openBillMonth(db: Awaited<ReturnType<typeof getDatabase>>): Promise<string> {
+  const now = currentMonthBR();
+  const around = [addMonths(now, -1), now, addMonths(now, 1)];
+  const files = await Promise.all(around.map((m) => db.getStatement(m)));
+  const closed = around.filter((m, i) => Object.keys(files[i].data.bankBills ?? {}).length > 0);
+  const next = closed.length ? addMonths(closed.at(-1)!, 1) : now;
+  return next > now ? next : now;
+}
+
 /** Estado completo para a interface: config, recorrentes e as faturas do mês + 5 anteriores. */
 export async function GET(req: Request) {
   return handle(async () => {
@@ -20,8 +34,8 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const requested = url.searchParams.get("month");
     if (requested && !isMonthKey(requested)) throw new BadRequestError("Mês inválido");
-    // Abre sempre no mês atual (as parcelas previstas criam meses lá na frente).
-    const month = requested ?? currentMonthBR();
+    const openMonth = await openBillMonth(db);
+    const month = requested ?? openMonth;
     const months = monthRange(month, 6);
     const [config, recurring, ...statements] = await Promise.all([
       db.getConfig(),
@@ -41,6 +55,7 @@ export async function GET(req: Request) {
       },
       viewer,
       month,
+      openMonth,
       availableMonths: [...new Set([...available, month, nextMonth])].sort(),
       config,
       recurring,
