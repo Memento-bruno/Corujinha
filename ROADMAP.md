@@ -66,8 +66,10 @@ Usaremos o **Meu Pluggy** (uso pessoal gratuito, até 5 conexões, sem uso comer
 - [ ] Cada um cria conta em [meu.pluggy.ai](https://meu.pluggy.ai) e autoriza os próprios bancos/cartões via Open Finance
 - [ ] Em [dashboard.pluggy.ai](https://dashboard.pluggy.ai) (mesmo login): criar uma aplicação → Demo → Connect Account → **MeuPluggy**
 - [ ] Copiar `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` (o secret aparece uma vez só) para o `.env.local` / Vercel
-- [ ] Copiar o **Item ID** da conexão MeuPluggy e cadastrar em **Ajustes → Open Finance**, escolhendo de quem são os cartões
-- [ ] Tocar em **Sincronizar agora** e conferir as compras em Faturas
+- [ ] No app, **Ajustes → Open Finance**: escolher de quem são os cartões e tocar em **Conectar banco**. Na janela da
+      Pluggy, escolher **MeuPluggy** e entrar com a conta do Meu Pluggy. A primeira sincronização roda sozinha.
+      (Alternativa: colar o Item ID da conexão em "Já tenho o Item ID".)
+- [ ] Conferir as compras em Faturas. Se um dia o banco pedir nova autorização, use **Reconectar**.
 
 Como funciona: o servidor lê só as contas de cartão de crédito (`/accounts`, `/v2/transactions`, `/bills`),
 cria o cartão no app pelos 4 últimos dígitos se ainda não existir, coloca cada compra no mês de vencimento da

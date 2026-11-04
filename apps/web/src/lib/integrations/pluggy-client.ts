@@ -92,3 +92,22 @@ export async function getTransactions(accountId: string, from: string): Promise<
   }
   return all;
 }
+
+/**
+ * Token de curta duração para abrir o widget Pluggy Connect no navegador.
+ * Ele só permite criar/atualizar conexões; o client secret continua no servidor.
+ */
+export async function createConnectToken(clientUserId: string, itemId?: string): Promise<string> {
+  const res = await call(`${BASE}/connect_token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-API-KEY": await apiKey() },
+    body: JSON.stringify({ ...(itemId ? { itemId } : {}), options: { clientUserId } }),
+  });
+  if (res.status === 401) cached = null;
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new PluggyError(res.status, `Pluggy ${res.status} ao criar o connect token: ${text.slice(0, 200)}`);
+  }
+  const body = (await res.json()) as { accessToken: string };
+  return body.accessToken;
+}
