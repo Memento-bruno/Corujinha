@@ -14,7 +14,7 @@ anterior (Expo + Fastify + Postgres) e serão removidas depois que a versão web
 | 0 | Estrutura Next.js (App Router + TS), ROADMAP, `.env.example` | ✅ |
 | 1 | UI completa, motor de compensação, motor de cortes por regras, Modo Percentual, persistência Drive com fallback local, importador CSV/OFX/PDF, dados de demonstração | ✅ (este PR) |
 | 2 | Configurar Google Cloud (OAuth + Drive) e ligar os dados reais | 🧑 Tarefa do usuário (em andamento) |
-| 3 | Open Finance via Pluggy: leitura automática das faturas dos cartões (somente leitura) | ⏳ Próxima |
+| 3 | Open Finance via Meu Pluggy: leitura automática das faturas dos cartões (somente leitura) | ✅ Entregue (falta testar com a conta real) |
 | 4 | Deploy na Vercel e instalação como PWA nos dois celulares ([passo a passo](apps/web/DEPLOY.md)) | 🧑 Tarefa do usuário |
 | 5 | Refinos: regras de categorização editáveis, histórico de fechamentos, exportar CSV, alertas de vencimento | ⏳ |
 
@@ -66,8 +66,14 @@ Usaremos o **Meu Pluggy** (uso pessoal gratuito, até 5 conexões, sem uso comer
 - [ ] Cada um cria conta em [meu.pluggy.ai](https://meu.pluggy.ai) e autoriza os próprios bancos/cartões via Open Finance
 - [ ] Em [dashboard.pluggy.ai](https://dashboard.pluggy.ai) (mesmo login): criar uma aplicação → Demo → Connect Account → **MeuPluggy**
 - [ ] Copiar `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` (o secret aparece uma vez só) para o `.env.local` / Vercel
+- [ ] Copiar o **Item ID** da conexão MeuPluggy e cadastrar em **Ajustes → Open Finance**, escolhendo de quem são os cartões
+- [ ] Tocar em **Sincronizar agora** e conferir as compras em Faturas
 
-Até lá, use o importador (Faturas → Importar) com os arquivos exportados pelo app do banco.
+Como funciona: o servidor lê só as contas de cartão de crédito (`/accounts`, `/v2/transactions`, `/bills`),
+cria o cartão no app pelos 4 últimos dígitos se ainda não existir, coloca cada compra no mês de vencimento da
+fatura e nunca altera compras que vocês já editaram nem meses fechados. O app sincroniza sozinho ao abrir
+(no máximo a cada 6h) e há um botão em Faturas → Importar. O importador de arquivos continua valendo para
+bancos que não estejam no Open Finance.
 
 ## Segurança (resumo)
 

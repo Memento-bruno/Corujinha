@@ -30,6 +30,7 @@ export const transactionSchema = z.object({
   split: splitSchema,
   installment: z.object({ current: z.number().int().min(1), total: z.number().int().min(1).max(99) }).optional(),
   source: z.enum(["demo", "csv", "ofx", "pdf", "pluggy", "manual"]),
+  externalId: z.string().max(120).optional(),
 });
 
 export const statementSchema = z.object({
@@ -83,12 +84,17 @@ export const configSchema = z.object({
     .max(20),
   defaultSplitPercentA: z.number().min(0).max(100),
   monthlyGoal: cents.min(0),
-  sectorBudgets: z.record(category, cents.min(0)),
+  sectorBudgets: z.partialRecord(category, cents.min(0)),
   savingsRules: z.object({
     movingAverageThresholdPct: z.number().min(0).max(500),
     highFrequencyMinOccurrences: z.number().int().min(2).max(100),
   }),
   subscriptionMerchants: z.array(z.string().max(80)).max(200),
+  pluggyItems: z
+    .array(z.object({ itemId: z.string().regex(/^[0-9a-f-]{36}$/i, "itemId inválido"), owner: userId }))
+    .max(10)
+    .optional(),
+  pluggyLastSyncAt: z.string().optional(),
   updatedAt: z.string(),
 });
 

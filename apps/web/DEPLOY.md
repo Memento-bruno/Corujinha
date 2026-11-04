@@ -8,7 +8,8 @@ Com o app online, vocês abrem um link no celular, entram com o Google e os dado
 3. Em **Root Directory**, clique em *Edit* e escolha `apps/web`. O framework é detectado como **Next.js**.
 4. Abra **Environment Variables** e cole as variáveis do seu `.env.local` (pode colar o arquivo inteiro de uma vez):
    `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ALLOWED_USER_EMAIL_1`, `ALLOWED_USER_EMAIL_2`,
-   `GOOGLE_DRIVE_FOLDER_ID`, `ENCRYPTION_SECRET`, `GOOGLE_DRIVE_AUTH_MODE=oauth_refresh_token`.
+   `GOOGLE_DRIVE_FOLDER_ID`, `ENCRYPTION_SECRET`, `GOOGLE_DRIVE_AUTH_MODE=oauth_refresh_token`
+   e, se for usar Open Finance, `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET`.
    Deixe `AUTH_URL` e `GOOGLE_DRIVE_REFRESH_TOKEN` para os passos 3 e 4.
 5. Clique em **Deploy**. Ao final, anote o endereço, por exemplo `https://corujinha-xyz.vercel.app`.
 

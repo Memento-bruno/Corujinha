@@ -54,6 +54,12 @@ export const env = {
     // Na Vercel (e em outros serverless) só /tmp aceita escrita; lá o fallback local é temporário.
     return v("LOCAL_DATA_DIR") ?? (process.env.VERCEL ? "/tmp/corujinha-data" : ".data");
   },
+  get pluggyClientId() {
+    return v("PLUGGY_CLIENT_ID");
+  },
+  get pluggyClientSecret() {
+    return v("PLUGGY_CLIENT_SECRET");
+  },
   get appUrl() {
     return v("AUTH_URL") ?? "http://localhost:3000";
   },
@@ -89,4 +95,8 @@ export function userIdForEmail(email: string | null | undefined): UserId | null 
   if (allowed.USER_A && e === allowed.USER_A) return "USER_A";
   if (allowed.USER_B && e === allowed.USER_B) return "USER_B";
   return null;
+}
+
+export function isPluggyConfigured(): boolean {
+  return Boolean(env.pluggyClientId && env.pluggyClientSecret);
 }
