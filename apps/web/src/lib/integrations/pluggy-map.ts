@@ -35,6 +35,8 @@ export interface PluggyTransaction {
     billId?: string | null;
     cardNumber?: string | null;
     purchaseDate?: string | null;
+    /** Mês da fatura previsto pelo banco ("0001-01" = lançamento sem fatura válida). */
+    billForecastDate?: string | null;
   } | null;
   merchant?: { name?: string | null; businessName?: string | null } | null;
 }
@@ -169,22 +171,21 @@ export function billPeriodEstimator(linked: { date: string; month: MonthKey }[])
 
 interface Draft {
   tx: Transaction;
-  purchaseDate: string;
-  /** O banco informou a data da compra original (então ela identifica a compra). */
-  knownPurchaseDate: boolean;
-  billMonth?: MonthKey;
+  month: MonthKey;
 }
 
 const PROJECTED_TAG = "Prevista";
 
 /**
  * Converte as transações de UMA conta de cartão em transações do Corujinha, agrupadas por mês da fatura.
- * - Compra com fatura vinculada vai sempre para o mês de vencimento dessa fatura (o banco manda; às vezes
- *   ele antecipa várias parcelas numa fatura só).
- * - Compras da fatura aberta (pendentes ou sem fatura) vão para o vencimento estimado pelo dia de fechamento.
- *   Parcelas sem fatura seguem a sequência de uma parcela da mesma compra que já tem fatura.
- * - As parcelas que o banco ainda não lançou entram como "Prevista" nos meses seguintes, para as faturas
- *   futuras baterem com o app do banco. Somem sozinhas quando a parcela real chega.
+ * Conferido com os dados reais do Santander (Open Finance via Pluggy):
+ * - Compra com fatura vinculada vai para o mês de vencimento dessa fatura.
+ * - O resto (pendentes, sem fatura) é da fatura aberta: o mês seguinte à última fatura fechada.
+ *   O banco já lança ali as parcelas do próximo ciclo assim que a fatura anterior fecha.
+ * - Lançamentos com previsão de fatura inválida ("0001-01") não entram em fatura nenhuma.
+ * - Parcelas futuras: para cada compra parcelada que tem parcela na fatura aberta, as parcelas
+ *   seguintes entram como "Prevista", uma por mês. Compras que não aparecem na fatura aberta
+ *   já terminaram ou foram antecipadas, e não geram previsão.
  */
 export function mapCardTransactions(
   txs: PluggyTransaction[],
@@ -195,30 +196,30 @@ export function mapCardTransactions(
   const cardFor = typeof cardOrResolver === "function" ? cardOrResolver : () => cardOrResolver;
   const sign = expenseSign(txs);
   const billMonth = new Map(bills.map((b) => [b.id, monthOfIso(b.dueDate)]));
-  const drafts: Draft[] = [];
+  const lastBill = [...billMonth.values()].sort().at(-1);
+  const openMonth = lastBill ? addMonths(lastBill, 1) : undefined;
+  const raw: { tx: Transaction; billMonth?: MonthKey }[] = [];
   for (const t of txs) {
     const rawDesc = t.merchant?.name || t.description || t.descriptionRaw || "";
     if (!rawDesc || isCardPayment(t)) continue;
+    const meta = t.creditCardMetadata;
+    if (meta?.billForecastDate?.startsWith("0001")) continue;
     const cents = Math.round(brlAmount(t) * 100) * sign;
     if (cents === 0) continue;
     const description = cleanDescription(rawDesc).slice(0, 140) || "Compra";
     const merchantKey = merchantKeyOf(description);
     const category = guessCategory(description, merchantKey);
-    const meta = t.creditCardMetadata;
     const card = cardFor(t);
     const installment =
       meta?.installmentNumber && meta?.totalInstallments && meta.totalInstallments > 1
         ? { current: meta.installmentNumber, total: meta.totalInstallments }
         : undefined;
-    const date = t.date.slice(0, 10);
-    drafts.push({
-      purchaseDate: (meta?.purchaseDate || t.date).slice(0, 10),
-      knownPurchaseDate: !!meta?.purchaseDate,
+    raw.push({
       billMonth: (meta?.billId && billMonth.get(meta.billId)) || undefined,
       tx: {
         id: `plg-${t.id}`,
         externalId: `pluggy:${t.id}`,
-        date,
+        date: t.date.slice(0, 10),
         description,
         merchantKey,
         amount: cents,
@@ -233,57 +234,38 @@ export function mapCardTransactions(
     });
   }
 
-  const estimate = billPeriodEstimator(
-    drafts.filter((d) => d.billMonth && !d.tx.installment).map((d) => ({ date: d.tx.date, month: d.billMonth! })),
-  );
-
-  // Parcelas da mesma compra: mesma descrição, cartão, valor, total de parcelas e data da compra.
-  const groups = new Map<string, Draft[]>();
-  for (const d of drafts) {
-    if (!d.tx.installment) continue;
-    // Sem a data original, a data de cada parcela muda mês a mês: agrupamos sem ela.
-    const k = [d.tx.cardId, d.tx.merchantKey, d.tx.amount, d.tx.installment.total, d.knownPurchaseDate ? d.purchaseDate : ""].join("|");
-    groups.set(k, [...(groups.get(k) ?? []), d]);
-  }
-  const monthOfDraft = new Map<Draft, MonthKey>();
-  for (const d of drafts) {
-    if (d.billMonth) monthOfDraft.set(d, d.billMonth);
-    else if (!d.tx.installment) monthOfDraft.set(d, estimate(d.tx.date));
-  }
-  for (const list of groups.values()) {
-    const anchor = list
-      .filter((d) => d.billMonth)
-      .sort((a, b) => b.tx.installment!.current - a.tx.installment!.current || b.billMonth!.localeCompare(a.billMonth!))[0];
-    for (const d of list) {
-      if (d.billMonth) continue;
-      const n = d.tx.installment!.current;
-      monthOfDraft.set(
-        d,
-        anchor ? addMonths(anchor.billMonth!, n - anchor.tx.installment!.current) : addMonths(estimate(d.purchaseDate), n - 1),
-      );
-    }
-  }
+  // Sem nenhuma fatura informada, estimamos o mês pela data (parcela N cai N-1 meses depois).
+  const estimate = (tx: Transaction): MonthKey =>
+    addMonths(monthOfIso(tx.date), tx.installment ? tx.installment.current - 1 : 0);
+  const placed: Draft[] = raw.map((r) => ({ tx: r.tx, month: r.billMonth ?? openMonth ?? estimate(r.tx) }));
 
   const out = new Map<MonthKey, Transaction[]>();
   const push = (month: MonthKey, tx: Transaction) => out.set(month, [...(out.get(month) ?? []), tx]);
-  for (const d of drafts) push(monthOfDraft.get(d)!, d.tx);
+  for (const d of placed) push(d.month, d.tx);
 
-  // Parcelas futuras que o banco ainda não mandou (cada compra projeta as suas, mesmo que
-  // haja outra compra igual na mesma loja).
+  // Mesma compra parcelada = mesmo cartão, loja, total de parcelas e mês da 1ª parcela.
+  const groups = new Map<string, Draft[]>();
+  for (const d of placed) {
+    const i = d.tx.installment;
+    if (!i) continue;
+    const k = [d.tx.cardId, d.tx.merchantKey, i.total, addMonths(d.month, -i.current)].join("|");
+    groups.set(k, [...(groups.get(k) ?? []), d]);
+  }
+  const latest = openMonth ?? placed.map((d) => d.month).sort().at(-1);
   for (const list of groups.values()) {
-    const have = new Set(list.map((d) => d.tx.installment!.current));
-    const last = list.reduce((a, b) => (b.tx.installment!.current > a.tx.installment!.current ? b : a));
-    const { current, total } = last.tx.installment!;
-    const base = monthOfDraft.get(last)!;
-    for (let n = current + 1; n <= Math.min(total, current + 36); n++) {
-      if (have.has(n)) continue;
-      push(addMonths(base, n - current), {
-        ...last.tx,
-        id: `${last.tx.id}-p${n}`,
-        externalId: `${last.tx.externalId}:p${n}`,
-        installment: { current: n, total },
-        tags: [...last.tx.tags, PROJECTED_TAG],
-      });
+    const top = Math.max(...list.map((d) => d.tx.installment!.current));
+    // Cada compra com a parcela mais recente na fatura aberta projeta as que faltam.
+    for (const last of list.filter((d) => d.tx.installment!.current === top && d.month === latest)) {
+      const { current, total } = last.tx.installment!;
+      for (let n = current + 1; n <= Math.min(total, current + 36); n++) {
+        push(addMonths(last.month, n - current), {
+          ...last.tx,
+          id: `${last.tx.id}-p${n}`,
+          externalId: `${last.tx.externalId}:p${n}`,
+          installment: { current: n, total },
+          tags: [...last.tx.tags, PROJECTED_TAG],
+        });
+      }
     }
   }
   return out;

@@ -164,20 +164,39 @@ describe("faturas futuras", () => {
     { id: "b9", dueDate: "2026-09-10" },
     { id: "b10", dueDate: "2026-10-10" },
   ];
-  it("respeita a fatura do banco mesmo com parcelas antecipadas e prevê as próximas", () => {
-    const parc = (n: number) =>
+  it("respeita a fatura do banco e prevê as parcelas que faltam a partir da fatura aberta", () => {
+    const parc = (n: number, billId?: string) =>
       tx(`tv${n}`, 300, {
         description: "TV LOJA",
         date: "2026-08-20T00:00:00Z",
-        creditCardMetadata: { installmentNumber: n, totalInstallments: 6, billId: n === 1 ? "b9" : "b10" },
+        creditCardMetadata: { installmentNumber: n, totalInstallments: 6, billId },
       });
-    const out = mapCardTransactions([1, 2, 3].map(parc), card, bills, []);
+    // Parcelas 2 e 3 antecipadas na mesma fatura; a 4 já está na fatura aberta (pendente).
+    const out = mapCardTransactions([parc(1, "b9"), parc(2, "b10"), parc(3, "b10"), parc(4)], card, bills, []);
     const sum = (m: string) => (out.get(m) ?? []).reduce((s, t) => s + t.amount, 0);
     expect(sum("2026-09")).toBe(30000);
     expect(sum("2026-10")).toBe(60000);
-    expect(out.get("2026-11")!.map((t) => t.installment!.current)).toEqual([4]);
-    expect(out.get("2026-13" as never)).toBeUndefined();
-    expect(out.get("2027-01")!.map((t) => t.externalId)).toEqual(["pluggy:tv3:p6"]);
+    expect(out.get("2026-11")!.map((t) => t.externalId)).toEqual(["pluggy:tv4"]);
+    expect(out.get("2026-12")!.map((t) => t.externalId)).toEqual(["pluggy:tv4:p5"]);
+    expect(out.get("2027-01")!.map((t) => t.externalId)).toEqual(["pluggy:tv4:p6"]);
+  });
+  it("não prevê parcelas de compra que sumiu da fatura aberta (terminou ou foi antecipada)", () => {
+    const out = mapCardTransactions(
+      [tx("x", 50, { description: "LOJA X", creditCardMetadata: { installmentNumber: 2, totalInstallments: 5, billId: "b10" } })],
+      card,
+      bills,
+      [],
+    );
+    expect([...out.keys()]).toEqual(["2026-10"]);
+  });
+  it("ignora lançamento sem fatura válida (0001-01)", () => {
+    const out = mapCardTransactions(
+      [tx("z", 274.9, { creditCardMetadata: { installmentNumber: 3, totalInstallments: 10, billForecastDate: "0001-01" } })],
+      card,
+      bills,
+      [],
+    );
+    expect(out.size).toBe(0);
   });
   it("põe compras da fatura aberta no próximo vencimento, pelo dia de fechamento", () => {
     const out = mapCardTransactions(
@@ -202,10 +221,11 @@ describe("parcelas previstas", () => {
       tx(id, 100, {
         description: "MAGALU",
         date: `2026-${day}T00:00:00Z`,
-        creditCardMetadata: { installmentNumber: 2, totalInstallments: 3, billId: "b10", purchaseDate: `2026-${day}T00:00:00Z` },
+        creditCardMetadata: { installmentNumber: 2, totalInstallments: 3, purchaseDate: `2026-${day}T00:00:00Z` },
       });
     const out = mapCardTransactions([p("x", "08-01"), p("y", "08-15")], card, [{ id: "b10", dueDate: "2026-10-10" }], []);
-    expect(out.get("2026-11")!.map((t) => t.externalId).sort()).toEqual(["pluggy:x:p3", "pluggy:y:p3"]);
+    // Sem fatura vinculada = fatura aberta (novembro); a parcela 3 de cada compra vai para dezembro.
+    expect(out.get("2026-12")!.map((t) => t.externalId).sort()).toEqual(["pluggy:x:p3", "pluggy:y:p3"]);
   });
 });
 
