@@ -28,8 +28,8 @@ export function CompositionChart() {
 
   return (
     <section ref={ref} aria-labelledby="stack-title" className="rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6">
-      <h2 id="stack-title" className="text-lg font-bold">Do que é feito cada mês</h2>
-      <p className="mt-1 text-sm text-zinc-600">Os meses depois de {monthName(d.openMonth)} são previstos (listrados).</p>
+      <h2 id="stack-title" className="text-base font-bold sm:text-lg">Do que é feito cada mês</h2>
+      <p className="mt-1 text-[13px] text-zinc-600 sm:text-sm">Os meses depois de {monthName(d.openMonth)} são previstos (listrados).</p>
       <div className="mt-4 flex flex-wrap gap-2">
         {COMPOSITION.map((c) => (
           <span key={c.key} className="flex items-center gap-1.5 rounded-full bg-zinc-50 px-2.5 py-1 text-xs font-semibold text-zinc-700">

@@ -20,8 +20,8 @@ export function CardsStrip() {
     <section ref={ref} aria-labelledby="cards-title" className="rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 id="cards-title" className="text-lg font-bold">Gasto por cartão</h2>
-          <p className="mt-1 text-sm text-zinc-600">Do cartão que mais gastou para o que menos gastou</p>
+          <h2 id="cards-title" className="text-base font-bold sm:text-lg">Gasto por cartão</h2>
+          <p className="mt-1 text-[13px] text-zinc-600 sm:text-sm">Do cartão que mais gastou para o que menos gastou</p>
         </div>
         <Link href="/configuracoes#cartoes" className="inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border border-zinc-300 bg-white px-3.5 text-sm font-semibold">
           + Cartão
@@ -30,7 +30,7 @@ export function CardsStrip() {
       {cards.length === 0 ? (
         <p className="mt-4 rounded-2xl bg-zinc-50 p-4 text-sm text-zinc-500">Nenhum cartão cadastrado. Adicione em Configurações.</p>
       ) : (
-        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
           {cards.map(({ c, total }, i) => (
             <div
               key={c.id}

@@ -20,7 +20,7 @@ export function BillsCard() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 id="fix-title" className="text-base font-bold sm:text-lg">Contas fixas e boletos</h2>
-          <p className="mt-1 text-sm text-zinc-600">Repetem todo mês, dentro ou fora do cartão</p>
+          <p className="mt-1 text-[13px] text-zinc-600 sm:text-sm">Repetem todo mês, dentro ou fora do cartão</p>
         </div>
         <button
           type="button"

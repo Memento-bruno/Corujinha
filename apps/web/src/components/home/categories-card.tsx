@@ -32,7 +32,7 @@ export function CategoriesCard() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 id="cat-title" className="text-base font-bold sm:text-lg">Para onde foi o dinheiro</h2>
-          <p className="mt-1 text-sm text-zinc-600 first-letter:uppercase">{monthName(d.month)}, por categoria</p>
+          <p className="mt-1 text-[13px] text-zinc-600 first-letter:uppercase sm:text-sm">{monthName(d.month)}, por categoria</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Segmented

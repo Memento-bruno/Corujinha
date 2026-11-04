@@ -15,10 +15,14 @@ const ITEMS = [
 ];
 
 /** Menu embaixo da tela: só ícones; o item aberto vira uma pílula preta com o nome. */
-export function BottomNav() {
+export function BottomNav({ zoom = 1 }: { zoom?: number }) {
   const pathname = usePathname();
   return (
-    <nav aria-label="Menu principal" className="pb-safe pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-4">
+    <nav
+      aria-label="Menu principal"
+      className="pb-safe pointer-events-none fixed inset-x-0 bottom-3 z-40 flex justify-center px-4"
+      style={zoom !== 1 ? { zoom } : undefined}
+    >
       <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-zinc-200 bg-white/90 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,.12)] backdrop-blur-xl">
         {ITEMS.map(({ href, label, icon: Icon }) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);

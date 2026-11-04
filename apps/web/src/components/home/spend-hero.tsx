@@ -39,14 +39,14 @@ export function SpendHero() {
     <section ref={ref} aria-labelledby="gastos-title" className="flex flex-wrap items-stretch gap-5 rounded-3xl border border-[#ebebef] bg-white p-4 sm:gap-8 sm:p-6">
       <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3.5">
         <div className="flex flex-wrap items-center gap-2">
-          <h1 id="gastos-title" className="text-lg font-bold text-zinc-900">
+          <h1 id="gastos-title" className="text-base font-bold text-zinc-900 sm:text-lg">
             Gastos de {monthName(d.month)}
           </h1>
           {status && <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${status.tone}`}>{status.label}</span>}
         </div>
-        <div className="tabular text-4xl font-extrabold tracking-tight text-zinc-900 sm:text-5xl">{fmt.privacy ? fmt.money(total, goal) : fmt.money(total)}</div>
+        <div className="tabular text-[32px] leading-tight font-extrabold tracking-tight text-zinc-900 sm:text-5xl">{fmt.privacy ? fmt.money(total, goal) : fmt.money(total)}</div>
         {fmt.privacy && <p className="-mt-2 text-xs text-zinc-500">da meta do mês</p>}
-        <p className="-mt-1.5 text-sm text-zinc-700">
+        <p className="-mt-1.5 text-[13px] text-zinc-700 sm:text-sm">
           Fatura do cartão <b>{fmt.money(spend.card)}</b> + contas e boletos <b>{fmt.money(spend.bills)}</b>
         </p>
 
@@ -67,7 +67,7 @@ export function SpendHero() {
               </div>
             ))}
           </div>
-          <div className="mt-2 flex justify-between gap-3 text-sm">
+          <div className="mt-2 flex justify-between gap-3 text-[13px] sm:text-sm">
             {USERS.map((u) => (
               <span key={u} className="flex items-center gap-2">
                 <span className="size-2.5 rounded-full" style={{ background: PERSON[u].bg }} aria-hidden />
@@ -117,9 +117,9 @@ export function SpendHero() {
                 <path d="M2 8 H36 M30 2 L37 8 L30 14" fill="none" stroke="#18181b" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <Dot u={t.to} name={users[t.to].name} />
-              <p className="flex-auto text-sm leading-snug">
+              <p className="flex-auto text-[13px] leading-snug sm:text-sm">
                 {first(users[t.from].name)} deve para {first(users[t.to].name)}{" "}
-                <b className="tabular text-lg whitespace-nowrap">{fmt.money(t.amount)}</b>
+                <b className="tabular text-base whitespace-nowrap sm:text-lg">{fmt.money(t.amount)}</b>
               </p>
             </>
           ) : (
