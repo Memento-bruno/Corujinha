@@ -170,6 +170,8 @@ export function billPeriodEstimator(linked: { date: string; month: MonthKey }[])
 interface Draft {
   tx: Transaction;
   purchaseDate: string;
+  /** O banco informou a data da compra original (então ela identifica a compra). */
+  knownPurchaseDate: boolean;
   billMonth?: MonthKey;
 }
 
@@ -211,6 +213,7 @@ export function mapCardTransactions(
     const date = t.date.slice(0, 10);
     drafts.push({
       purchaseDate: (meta?.purchaseDate || t.date).slice(0, 10),
+      knownPurchaseDate: !!meta?.purchaseDate,
       billMonth: (meta?.billId && billMonth.get(meta.billId)) || undefined,
       tx: {
         id: `plg-${t.id}`,
@@ -238,7 +241,8 @@ export function mapCardTransactions(
   const groups = new Map<string, Draft[]>();
   for (const d of drafts) {
     if (!d.tx.installment) continue;
-    const k = [d.tx.cardId, d.tx.merchantKey, d.tx.amount, d.tx.installment.total, d.purchaseDate].join("|");
+    // Sem a data original, a data de cada parcela muda mês a mês: agrupamos sem ela.
+    const k = [d.tx.cardId, d.tx.merchantKey, d.tx.amount, d.tx.installment.total, d.knownPurchaseDate ? d.purchaseDate : ""].join("|");
     groups.set(k, [...(groups.get(k) ?? []), d]);
   }
   const monthOfDraft = new Map<Draft, MonthKey>();
@@ -264,18 +268,15 @@ export function mapCardTransactions(
   const push = (month: MonthKey, tx: Transaction) => out.set(month, [...(out.get(month) ?? []), tx]);
   for (const d of drafts) push(monthOfDraft.get(d)!, d.tx);
 
-  // Parcelas futuras que o banco ainda não mandou.
-  const seen = new Set(
-    drafts.filter((d) => d.tx.installment).map((d) => [d.tx.cardId, d.tx.merchantKey, d.tx.installment!.total, d.tx.installment!.current].join("|")),
-  );
+  // Parcelas futuras que o banco ainda não mandou (cada compra projeta as suas, mesmo que
+  // haja outra compra igual na mesma loja).
   for (const list of groups.values()) {
+    const have = new Set(list.map((d) => d.tx.installment!.current));
     const last = list.reduce((a, b) => (b.tx.installment!.current > a.tx.installment!.current ? b : a));
     const { current, total } = last.tx.installment!;
     const base = monthOfDraft.get(last)!;
     for (let n = current + 1; n <= Math.min(total, current + 36); n++) {
-      const k = [last.tx.cardId, last.tx.merchantKey, total, n].join("|");
-      if (seen.has(k)) continue;
-      seen.add(k);
+      if (have.has(n)) continue;
       push(addMonths(base, n - current), {
         ...last.tx,
         id: `${last.tx.id}-p${n}`,

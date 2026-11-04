@@ -195,3 +195,16 @@ describe("faturas futuras", () => {
     expect(out.get("2026-11")?.map((t) => t.id).sort()).toEqual(["plg-c", "plg-d"]);
   });
 });
+
+describe("parcelas previstas", () => {
+  it("prevê as parcelas de duas compras iguais na mesma loja", () => {
+    const p = (id: string, day: string) =>
+      tx(id, 100, {
+        description: "MAGALU",
+        date: `2026-${day}T00:00:00Z`,
+        creditCardMetadata: { installmentNumber: 2, totalInstallments: 3, billId: "b10", purchaseDate: `2026-${day}T00:00:00Z` },
+      });
+    const out = mapCardTransactions([p("x", "08-01"), p("y", "08-15")], card, [{ id: "b10", dueDate: "2026-10-10" }], []);
+    expect(out.get("2026-11")!.map((t) => t.externalId).sort()).toEqual(["pluggy:x:p3", "pluggy:y:p3"]);
+  });
+});
