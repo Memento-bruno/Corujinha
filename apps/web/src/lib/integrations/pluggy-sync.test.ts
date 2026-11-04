@@ -76,3 +76,18 @@ describe("clearPluggyTransactions", () => {
     expect((await db.getStatement(thisMonth)).data.transactions.map((t) => t.id)).toEqual(["manual-1"]);
   });
 });
+
+describe("disconnectPluggyItem", () => {
+  it("tira a conexão, as compras dela e o cartão criado por ela", async () => {
+    const { syncPluggy, disconnectPluggyItem } = await import("./pluggy-sync");
+    await syncPluggy(db, 3);
+    expect((await db.getStatement(thisMonth)).data.transactions[0].pluggyItemId).toBe(ITEM);
+    const r = await disconnectPluggyItem(db, ITEM);
+    expect(r.removed).toBe(2);
+    expect(r.removedCards).toBe(1);
+    const cfg = (await db.getConfig()).data;
+    expect(cfg.pluggyItems).toEqual([]);
+    expect(cfg.cards.some((c) => c.last4 === "4321")).toBe(false);
+    expect((await db.getStatement(thisMonth)).data.transactions).toEqual([]);
+  });
+});

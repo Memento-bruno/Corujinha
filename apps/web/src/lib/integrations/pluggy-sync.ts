@@ -58,6 +58,7 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
         // Só marca o cartão como sincronizado depois de ler tudo dele sem erro.
         for (const [m, list] of mapped) {
           if (m < firstMonth) continue;
+          for (const t of list) t.pluggyItemId = item.itemId;
           byMonth.set(m, [...(byMonth.get(m) ?? []), ...list]);
         }
         syncedCardIds.add(resolver.main.id);
@@ -120,13 +121,16 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
 }
 
 /** Apaga as compras que vieram do banco (Open Finance) dos meses abertos. Meses fechados ficam como estão. */
-export async function clearPluggyTransactions(db: DriveDatabaseService): Promise<{ removed: number; skippedClosedMonths: MonthKey[] }> {
+export async function clearPluggyTransactions(
+  db: DriveDatabaseService,
+  match: (t: Transaction) => boolean = () => true,
+): Promise<{ removed: number; skippedClosedMonths: MonthKey[] }> {
   let removed = 0;
   const skippedClosedMonths: MonthKey[] = [];
   for (const month of await db.listStatementMonths()) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const cur = await db.getStatement(month);
-      const keep = cur.data.transactions.filter((t) => t.source !== "pluggy");
+      const keep = cur.data.transactions.filter((t) => t.source !== "pluggy" || !match(t));
       const gone = cur.data.transactions.length - keep.length;
       if (gone === 0) break;
       if (cur.data.snapshot) {
@@ -143,4 +147,53 @@ export async function clearPluggyTransactions(db: DriveDatabaseService): Promise
     }
   }
   return { removed, skippedClosedMonths };
+}
+
+/**
+ * Desconecta uma conexão Open Finance: tira do cadastro, apaga as compras que vieram dela
+ * (meses fechados ficam) e os cartões criados por ela que ficaram sem compras.
+ */
+export async function disconnectPluggyItem(db: DriveDatabaseService, itemId: string) {
+  // Cartões das contas dessa conexão, para compras antigas gravadas antes de guardarmos a conexão.
+  const before = (await db.getConfig()).data;
+  const remaining = (before.pluggyItems ?? []).filter((i) => i.itemId !== itemId);
+  let itemCards: Set<string> | null = null;
+  if (remaining.length > 0) {
+    try {
+      const owner = (before.pluggyItems ?? []).find((i) => i.itemId === itemId)?.owner ?? "USER_A";
+      itemCards = new Set();
+      for (const acc of await getCreditAccounts(itemId)) {
+        const prefix = `card-pluggy-${acc.id.slice(0, 8)}`;
+        itemCards.add(cardResolver(acc, owner, before.cards).main.id);
+        for (const c of before.cards) if (c.id.startsWith(prefix)) itemCards.add(c.id);
+      }
+    } catch {
+      itemCards = new Set();
+    }
+  }
+  const match = (t: Transaction) =>
+    remaining.length === 0 || t.pluggyItemId === itemId || (!t.pluggyItemId && (itemCards?.has(t.cardId) ?? false));
+  const result = await clearPluggyTransactions(db, match);
+
+  // Cartões criados pelo Open Finance que não têm mais nenhuma compra.
+  const used = new Set<string>();
+  for (const m of await db.listStatementMonths()) for (const t of (await db.getStatement(m)).data.transactions) used.add(t.cardId);
+  let removedCards = 0;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const latest = await db.getConfig();
+    const cards = latest.data.cards.filter(
+      (c) => !c.id.startsWith("card-pluggy-") || used.has(c.id) || (remaining.length > 0 && !itemCards?.has(c.id)),
+    );
+    removedCards = latest.data.cards.length - cards.length;
+    try {
+      await db.saveConfig(
+        { ...latest.data, cards, pluggyItems: (latest.data.pluggyItems ?? []).filter((i) => i.itemId !== itemId) },
+        latest.etag,
+      );
+      break;
+    } catch (e) {
+      if (!(e instanceof ConflictError) || attempt === 2) throw e;
+    }
+  }
+  return { ...result, removedCards };
 }

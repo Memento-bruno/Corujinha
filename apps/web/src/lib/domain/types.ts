@@ -133,6 +133,8 @@ export interface Transaction {
   source: TransactionSource;
   /** Id da transação no provedor (ex.: Pluggy), para não importar duas vezes. */
   externalId?: string;
+  /** Conexão Open Finance de onde a compra veio (para apagar ao desconectar). */
+  pluggyItemId?: string;
 }
 
 export type RecurringKind = "CONTA_FIXA" | "FINANCIAMENTO" | "PARCELAMENTO" | "ASSINATURA";
