@@ -118,3 +118,29 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
 
   return summary;
 }
+
+/** Apaga as compras que vieram do banco (Open Finance) dos meses abertos. Meses fechados ficam como estão. */
+export async function clearPluggyTransactions(db: DriveDatabaseService): Promise<{ removed: number; skippedClosedMonths: MonthKey[] }> {
+  let removed = 0;
+  const skippedClosedMonths: MonthKey[] = [];
+  for (const month of await db.listStatementMonths()) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const cur = await db.getStatement(month);
+      const keep = cur.data.transactions.filter((t) => t.source !== "pluggy");
+      const gone = cur.data.transactions.length - keep.length;
+      if (gone === 0) break;
+      if (cur.data.snapshot) {
+        skippedClosedMonths.push(month);
+        break;
+      }
+      try {
+        await db.saveStatement({ ...cur.data, transactions: keep }, cur.etag);
+        removed += gone;
+        break;
+      } catch (e) {
+        if (!(e instanceof ConflictError) || attempt === 2) throw e;
+      }
+    }
+  }
+  return { removed, skippedClosedMonths };
+}
