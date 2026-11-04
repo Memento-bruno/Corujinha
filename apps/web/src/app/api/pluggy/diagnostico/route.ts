@@ -59,9 +59,25 @@ export async function GET() {
             `<tr><td>${m}</td><td>${bank === null ? "—" : formatBRL(bank)}</td><td>${formatBRL(ours)}</td><td>${formatBRL(saved)}</td><td>${diff}</td><td>${(mapped.get(m) ?? []).length}</td></tr>`,
           );
         }
+        const monthOfTx = new Map<string, string>();
+        for (const [m, list] of mapped) for (const t of list) monthOfTx.set(t.id, m);
+        const billMonth = new Map(bills.map((b) => [b.id, b.dueDate.slice(0, 7)]));
+        const nowMonth = monthOf(new Date());
+        const instRows = txs
+          .filter((t) => (t.creditCardMetadata?.totalInstallments ?? 0) > 1 && (monthOfTx.get(`plg-${t.id}`) ?? "") >= nowMonth)
+          .map((t) => {
+            const meta = t.creditCardMetadata!;
+            const linked = meta.billId ? (billMonth.get(meta.billId) ?? "fatura não listada") : "sem fatura";
+            return { m: monthOfTx.get(`plg-${t.id}`)!, html: `<tr><td>${esc((t.description || "").slice(0, 28))}</td><td>${meta.installmentNumber}/${meta.totalInstallments}</td><td>${t.date.slice(0, 10)}</td><td>${(meta.purchaseDate ?? "—").slice(0, 10)}</td><td>${esc(linked)}</td><td>${monthOfTx.get(`plg-${t.id}`)}</td><td>${formatBRL(Math.round(Math.abs(brlAmount(t)) * 100))}</td></tr>` };
+          })
+          .sort((a, b) => a.m.localeCompare(b.m))
+          .map((r) => r.html);
+        const instTable = instRows.length
+          ? `<h3>Parcelas de ${nowMonth} em diante</h3><table><tr><th>Compra</th><th>Parcela</th><th>Data</th><th>Data da compra</th><th>Fatura do banco</th><th>Mês no app</th><th>Valor</th></tr>${instRows.join("")}</table>`
+          : "";
         parts.push(`<h2>${esc(card.nickname)} •${last4Of(account.number) ?? "????"}</h2>
 <p>${txs.length} lançamentos desde ${dates[0] ?? "-"} · sinal ${expenseSign(txs) === 1 ? "positivo" : "invertido"} (${sumPos} positivos) · ${payments} pagamentos de fatura ignorados · ${pending} pendentes · ${foreign} em moeda estrangeira · ${installments} parcelados · ${noBill} sem fatura vinculada · ${bills.length} faturas informadas pelo banco · finais de cartão nas compras: ${cardFinals.length ? cardFinals.map((f) => "•" + f).join(", ") : "não informados"}</p>
-<table><tr><th>Fatura</th><th>Banco</th><th>Corujinha calculou</th><th>Salvo no app</th><th>Diferença</th><th>Compras</th></tr>${rows.join("")}</table>`);
+<table><tr><th>Fatura</th><th>Banco</th><th>Corujinha calculou</th><th>Salvo no app</th><th>Diferença</th><th>Compras</th></tr>${rows.join("")}</table>${instTable}`);
       }
     } catch (e) {
       parts.push(`<p style="color:#e11d48">Conexão ${esc(item.itemId.slice(0, 8))}…: ${esc(e instanceof PluggyError ? e.message : "erro inesperado")}</p>`);
@@ -69,7 +85,7 @@ export async function GET() {
   }
 
   const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Conferência das faturas</title>
-<style>body{font-family:system-ui,sans-serif;background:#f4f5f7;color:#18181b;margin:0;padding:16px}main{max-width:760px;margin:0 auto;background:#fff;border-radius:20px;padding:20px}h1{font-size:18px}h2{font-size:15px;margin-top:24px}p{font-size:12px;color:#52525b}table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:right;padding:6px 4px;border-bottom:1px solid #eee}th:first-child,td:first-child{text-align:left}</style></head>
-<body><main><h1>Conferência das faturas (últimos 6 meses)</h1><p>Somente leitura. "Banco" é o total da fatura informado pelo Santander via Open Finance; pode incluir juros, IOF, anuidade e saldo anterior.</p>${parts.join("") || "<p>Nenhuma conexão cadastrada.</p>"}</main></body></html>`;
+<style>body{font-family:system-ui,sans-serif;background:#f4f5f7;color:#18181b;margin:0;padding:16px}main{max-width:760px;margin:0 auto;background:#fff;border-radius:20px;padding:20px}h1{font-size:18px}h2{font-size:15px;margin-top:24px}h3{font-size:13px;margin-top:16px}main{overflow-x:auto}p{font-size:12px;color:#52525b}table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:right;padding:6px 4px;border-bottom:1px solid #eee}th:first-child,td:first-child{text-align:left}</style></head>
+<body><main><h1>Conferência das faturas (últimos 6 meses)</h1><p>Somente leitura. "Banco" é o total da fatura informado pelo banco via Open Finance; pode incluir juros, IOF, anuidade e saldo anterior.</p>${parts.join("") || "<p>Nenhuma conexão cadastrada.</p>"}</main></body></html>`;
   return new NextResponse(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }

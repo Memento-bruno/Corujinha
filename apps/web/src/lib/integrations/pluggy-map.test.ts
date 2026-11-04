@@ -156,3 +156,35 @@ describe("cartões virtuais", () => {
     expect(r.created.map((c) => [c.last4, c.nickname])).toEqual([["9876", "Santander virtual"]]);
   });
 });
+
+describe("faturas futuras", () => {
+  const bills = [
+    { id: "b9", dueDate: "2026-09-10" },
+    { id: "b10", dueDate: "2026-10-10" },
+  ];
+  it("espalha parcelas futuras que o banco ligou à mesma fatura", () => {
+    const parc = (n: number) =>
+      tx(`tv${n}`, 300, {
+        description: "TV LOJA",
+        date: "2026-08-20T00:00:00Z",
+        creditCardMetadata: { installmentNumber: n, totalInstallments: 4, billId: n <= 2 ? `b${8 + n}` : "b10" },
+      });
+    const out = mapCardTransactions([1, 2, 3, 4].map(parc), card, bills, []);
+    expect([...out.keys()].sort()).toEqual(["2026-09", "2026-10", "2026-11", "2026-12"]);
+  });
+  it("põe compras da fatura aberta no próximo vencimento, pelo dia de fechamento", () => {
+    const out = mapCardTransactions(
+      [
+        tx("a", 10, { date: "2026-08-25T00:00:00Z", creditCardMetadata: { billId: "b9" } }),
+        tx("b", 10, { date: "2026-09-25T00:00:00Z", creditCardMetadata: { billId: "b10" } }),
+        tx("c", 10, { date: "2026-09-28T00:00:00Z" }),
+        tx("d", 10, { date: "2026-10-03T00:00:00Z" }),
+      ],
+      card,
+      bills,
+      [],
+    );
+    expect(out.get("2026-10")?.map((t) => t.id)).toEqual(["plg-b"]);
+    expect(out.get("2026-11")?.map((t) => t.id).sort()).toEqual(["plg-c", "plg-d"]);
+  });
+});

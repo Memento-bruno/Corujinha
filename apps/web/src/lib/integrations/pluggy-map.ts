@@ -2,7 +2,7 @@
  * Conversão (pura, testável) dos dados da Pluggy para o modelo do Corujinha.
  * Escopo estrito: só contas de cartão de crédito, só leitura.
  */
-import { addMonths } from "../domain/months";
+import { addMonths, monthDiff } from "../domain/months";
 import type { CardBrand, CreditCard, MonthKey, Transaction, UserId } from "../domain/types";
 import { cleanDescription, guessCategory, merchantKeyOf } from "../importers/normalize";
 import { isInvoicePayment } from "../importers/types";
@@ -148,7 +148,38 @@ function monthOfIso(iso: string): MonthKey {
   return iso.slice(0, 7);
 }
 
-/** Converte as transações de UMA conta de cartão em transações do Corujinha, agrupadas por mês da fatura. */
+/** Mês de vencimento estimado para compras sem fatura vinculada (fatura aberta). */
+export function billPeriodEstimator(linked: { date: string; month: MonthKey }[]) {
+  // Usa a fatura mais recente com compras à vista: a última compra dela marca o fechamento.
+  let closingDay = 31;
+  let shift = 0;
+  const lastMonth = linked.map((l) => l.month).sort().pop();
+  if (lastMonth) {
+    const last = linked
+      .filter((l) => l.month === lastMonth)
+      .map((l) => l.date)
+      .sort()
+      .pop()!;
+    closingDay = Number(last.slice(8, 10));
+    shift = monthDiff(monthOfIso(last), lastMonth);
+  }
+  return (date: string): MonthKey =>
+    addMonths(monthOfIso(date), shift + (Number(date.slice(8, 10)) > closingDay ? 1 : 0));
+}
+
+interface Draft {
+  tx: Transaction;
+  purchaseDate: string;
+  billMonth?: MonthKey;
+}
+
+/**
+ * Converte as transações de UMA conta de cartão em transações do Corujinha, agrupadas por mês da fatura.
+ * - Compra com fatura vinculada vai para o mês de vencimento dessa fatura.
+ * - Parcelas da mesma compra ficam uma em cada fatura, contando a partir de uma parcela já faturada
+ *   (o banco às vezes liga todas as parcelas futuras à fatura atual).
+ * - Sem fatura vinculada, estimamos pelo dia de fechamento visto nas faturas anteriores.
+ */
 export function mapCardTransactions(
   txs: PluggyTransaction[],
   cardOrResolver: CreditCard | ((t: PluggyTransaction) => CreditCard),
@@ -158,7 +189,7 @@ export function mapCardTransactions(
   const cardFor = typeof cardOrResolver === "function" ? cardOrResolver : () => cardOrResolver;
   const sign = expenseSign(txs);
   const billMonth = new Map(bills.map((b) => [b.id, monthOfIso(b.dueDate)]));
-  const out = new Map<MonthKey, Transaction[]>();
+  const drafts: Draft[] = [];
   for (const t of txs) {
     if ((t.status ?? "POSTED").toUpperCase() === "PENDING") continue;
     const rawDesc = t.merchant?.name || t.description || t.descriptionRaw || "";
@@ -175,25 +206,61 @@ export function mapCardTransactions(
         ? { current: meta.installmentNumber, total: meta.totalInstallments }
         : undefined;
     const date = t.date.slice(0, 10);
-    // Sem fatura vinculada, a parcela N de uma compra antiga cai N-1 meses depois da compra.
-    const fallback = installment ? addMonths(monthOfIso(date), installment.current - 1) : monthOfIso(date);
-    const month = (meta?.billId && billMonth.get(meta.billId)) || fallback;
-    const tx: Transaction = {
-      id: `plg-${t.id}`,
-      externalId: `pluggy:${t.id}`,
-      date,
-      description,
-      merchantKey,
-      amount: cents,
-      cardId: card.id,
-      paidBy: card.owner,
-      category,
-      tags: category === "assinaturas" || subscriptionMerchants.includes(merchantKey) ? ["Assinatura"] : [],
-      split: { type: "SHARED_DEFAULT" },
-      installment,
-      source: "pluggy",
-    };
-    out.set(month, [...(out.get(month) ?? []), tx]);
+    drafts.push({
+      purchaseDate: (meta?.purchaseDate || t.date).slice(0, 10),
+      billMonth: (meta?.billId && billMonth.get(meta.billId)) || undefined,
+      tx: {
+        id: `plg-${t.id}`,
+        externalId: `pluggy:${t.id}`,
+        date,
+        description,
+        merchantKey,
+        amount: cents,
+        cardId: card.id,
+        paidBy: card.owner,
+        category,
+        tags: category === "assinaturas" || subscriptionMerchants.includes(merchantKey) ? ["Assinatura"] : [],
+        split: { type: "SHARED_DEFAULT" },
+        installment,
+        source: "pluggy",
+      },
+    });
+  }
+
+  const estimate = billPeriodEstimator(
+    drafts.filter((d) => d.billMonth && !d.tx.installment).map((d) => ({ date: d.tx.date, month: d.billMonth! })),
+  );
+
+  // Parcelas da mesma compra: mesma descrição, cartão, valor, total de parcelas e data da compra.
+  const groups = new Map<string, Draft[]>();
+  for (const d of drafts) {
+    if (!d.tx.installment) continue;
+    const k = [d.tx.cardId, d.tx.merchantKey, d.tx.amount, d.tx.installment.total, d.purchaseDate].join("|");
+    groups.set(k, [...(groups.get(k) ?? []), d]);
+  }
+  const monthOfDraft = new Map<Draft, MonthKey>();
+  for (const list of groups.values()) {
+    // Âncora: a menor parcela ligada a cada fatura (as demais ligadas à mesma fatura são futuras).
+    const perBill = new Map<MonthKey, Draft>();
+    for (const d of list) {
+      if (!d.billMonth) continue;
+      const cur = perBill.get(d.billMonth);
+      if (!cur || d.tx.installment!.current < cur.tx.installment!.current) perBill.set(d.billMonth, d);
+    }
+    const anchor = [...perBill.values()].sort((a, b) => a.tx.installment!.current - b.tx.installment!.current)[0];
+    for (const d of list) {
+      const n = d.tx.installment!.current;
+      monthOfDraft.set(
+        d,
+        anchor ? addMonths(anchor.billMonth!, n - anchor.tx.installment!.current) : addMonths(estimate(d.purchaseDate), n - 1),
+      );
+    }
+  }
+
+  const out = new Map<MonthKey, Transaction[]>();
+  for (const d of drafts) {
+    const month = monthOfDraft.get(d) ?? d.billMonth ?? estimate(d.tx.date);
+    out.set(month, [...(out.get(month) ?? []), d.tx]);
   }
   return out;
 }
