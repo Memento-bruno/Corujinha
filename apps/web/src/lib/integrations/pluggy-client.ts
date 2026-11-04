@@ -67,7 +67,7 @@ export async function getCreditAccounts(itemId: string): Promise<PluggyAccount[]
 
 export async function getBills(accountId: string): Promise<PluggyBill[]> {
   try {
-    const r = await get<{ results: PluggyBill[] }>("/bills", { accountId, pageSize: "100" });
+    const r = await get<{ results: PluggyBill[] }>("/bills", { accountId });
     return r.results ?? [];
   } catch {
     return []; // nem toda instituição informa faturas; usamos a data da compra
@@ -78,11 +78,10 @@ export async function getBills(accountId: string): Promise<PluggyBill[]> {
 export async function getTransactions(accountId: string, from: string): Promise<PluggyTransaction[]> {
   const all: PluggyTransaction[] = [];
   let after: string | undefined;
-  for (let page = 0; page < 50; page++) {
+  for (let page = 0; page < 200; page++) {
     const r = await get<{ results: PluggyTransaction[]; next?: string | null }>("/v2/transactions", {
       accountId,
       dateFrom: from,
-      pageSize: "500",
       after,
     });
     all.push(...(r.results ?? []));
