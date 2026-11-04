@@ -30,11 +30,11 @@ export function CardsStrip() {
       {cards.length === 0 ? (
         <p className="mt-4 rounded-2xl bg-zinc-50 p-4 text-sm text-zinc-500">Nenhum cartão cadastrado. Adicione em Configurações.</p>
       ) : (
-        <div className="no-scrollbar -mx-5 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 sm:-mx-6 sm:px-6">
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {cards.map(({ c, total }, i) => (
             <div
               key={c.id}
-              className="w-[46%] shrink-0 snap-start transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none sm:w-[300px]"
+              className="min-w-0 transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none"
               style={{ opacity: shown ? 1 : 0, transform: shown ? "none" : "translateY(12px)", transitionDelay: `${i * 90}ms` }}
             >
               <div className="relative">

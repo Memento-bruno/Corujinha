@@ -40,7 +40,7 @@ export function CreditCardVisual({
     <div
       className={cn(
         "holo relative aspect-[1.7/1] w-full overflow-hidden rounded-3xl p-4 text-zinc-900 shadow-soft transition sm:p-5",
-        compact && "rounded-2xl p-2.5 sm:p-5 [&_.cc-bottom]:p-2.5 sm:[&_.cc-bottom]:p-5 [&_.cc-num]:text-[11px] sm:[&_.cc-num]:text-lg [&_.cc-chip]:hidden sm:[&_.cc-chip]:block [&_.cc-top_svg]:size-4",
+        compact && "rounded-2xl p-2.5 sm:p-3.5 [&_.cc-bottom]:p-2.5 sm:[&_.cc-bottom]:p-3.5 [&_.cc-num]:text-[11px] sm:[&_.cc-num]:text-sm [&_.cc-chip]:hidden [&_.cc-top_svg]:size-4",
         selected && "ring-2 ring-zinc-900 ring-offset-2",
         className,
       )}
