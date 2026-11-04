@@ -304,7 +304,7 @@ export function reconcile(
       continue;
     }
     seen.add(t.externalId);
-    const next = { ...t, amount: fresh.amount, date: fresh.date, installment: fresh.installment, cardId: fresh.cardId, paidBy: fresh.paidBy };
+    const next = { ...t, amount: fresh.amount, date: fresh.date, installment: fresh.installment, cardId: fresh.cardId, paidBy: fresh.paidBy, pluggyItemId: fresh.pluggyItemId ?? t.pluggyItemId };
     if (
       next.amount !== t.amount ||
       next.date !== t.date ||

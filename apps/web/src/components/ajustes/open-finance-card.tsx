@@ -83,6 +83,27 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
     }
   };
 
+  const disconnect = async (id: string) => {
+    if (!window.confirm("Desconectar este banco? As compras que vieram dele saem do app (meses fechados ficam como estão).")) return;
+    setClearing(true);
+    try {
+      const res = await fetch("/api/pluggy/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemId: id }),
+      });
+      if (!res.ok) throw new Error("Não consegui desconectar agora. Tente de novo.");
+      const r = (await res.json()) as { removed: number; skippedClosedMonths: string[] };
+      toast(`Banco desconectado. ${r.removed} compra${r.removed === 1 ? "" : "s"} removida${r.removed === 1 ? "" : "s"}.`, "success");
+      if (r.skippedClosedMonths.length) toast(`Meses fechados não foram alterados: ${r.skippedClosedMonths.join(", ")}.`, "info");
+      await reload();
+    } catch (e) {
+      toast((e as Error).message, "error");
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <Card id="open-finance">
       <CardHeader
@@ -123,7 +144,8 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
                   </button>
                   <button
                     className="inline-flex items-center gap-1 text-xs font-semibold text-rose-600"
-                    onClick={() => void updateConfig((c) => ({ ...c, pluggyItems: (c.pluggyItems ?? []).filter((x) => x.itemId !== i.itemId) }))}
+                    disabled={clearing}
+                    onClick={() => void disconnect(i.itemId)}
                   >
                     <Trash2 className="size-3.5" /> Remover
                   </button>

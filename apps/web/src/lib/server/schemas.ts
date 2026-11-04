@@ -31,6 +31,7 @@ export const transactionSchema = z.object({
   installment: z.object({ current: z.number().int().min(1), total: z.number().int().min(1).max(99) }).optional(),
   source: z.enum(["demo", "csv", "ofx", "pdf", "pluggy", "manual"]),
   externalId: z.string().max(120).optional(),
+  pluggyItemId: z.string().max(64).optional(),
 });
 
 export const statementSchema = z.object({
