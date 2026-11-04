@@ -8,12 +8,17 @@ As faturas de cartão do casal num só lugar, com a divisão das contas de casa 
 - Divisão meio a meio, proporcional à renda ou por percentual.
 - Acesso restrito a duas pessoas, com trava biométrica.
 
-Arquitetura, segurança e regulatório: [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
+> **Nova versão:** o app agora é um PWA Next.js em [`apps/web`](apps/web) com login Google e Google Drive
+> como banco de dados. Rode `npm install && npm run dev` e abra http://localhost:3000 (modo demo, sem credenciais).
+> Fases e checklist de configuração: [ROADMAP.md](ROADMAP.md).
+
+Arquitetura do protótipo anterior (Expo + API + Postgres): [docs/ARQUITETURA.md](docs/ARQUITETURA.md).
 
 ## Estrutura
 
 ```
 packages/core   regras de divisão e modelos (TypeScript puro, testado)
+apps/web        app web Next.js (PWA) — versão atual
 apps/api        API Fastify (fala com o agregador Pluggy)
 apps/mobile     app Expo / React Native (iOS e Android)
 db/migrations   esquema Postgres com Row Level Security
