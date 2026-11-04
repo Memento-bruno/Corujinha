@@ -67,3 +67,14 @@ body {
 .pb-safe {
   padding-bottom: max(env(safe-area-inset-bottom), 0px);
 }
+
+/* Logo flutuando na tela de carregamento */
+@keyframes ls-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}

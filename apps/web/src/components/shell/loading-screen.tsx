@@ -324,7 +324,9 @@ export function LoadingScreen({
       aria-valuemax={100}
       aria-valuenow={pct}
     >
-      <div className="text-center">
+      <div className="flex flex-col items-center text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-sol.svg" alt="Corujinha" width={88} height={88} className="mb-1 size-[88px] animate-[ls-bob_2.4s_ease-in-out_infinite] motion-reduce:animate-none" />
         <div className="text-xl font-bold tracking-tight">Corujinha</div>
         <div className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{message}</div>
       </div>
