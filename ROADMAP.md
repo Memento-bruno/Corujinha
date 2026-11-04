@@ -15,7 +15,7 @@ anterior (Expo + Fastify + Postgres) e serão removidas depois que a versão web
 | 1 | UI completa, motor de compensação, motor de cortes por regras, Modo Percentual, persistência Drive com fallback local, importador CSV/OFX/PDF, dados de demonstração | ✅ (este PR) |
 | 2 | Configurar Google Cloud (OAuth + Drive) e ligar os dados reais | 🧑 Tarefa do usuário (em andamento) |
 | 3 | Open Finance via Pluggy: leitura automática das faturas dos cartões (somente leitura) | ⏳ Próxima |
-| 4 | Deploy (Vercel ou similar), domínio, instalação como PWA nos dois celulares | ⏳ |
+| 4 | Deploy na Vercel e instalação como PWA nos dois celulares ([passo a passo](apps/web/DEPLOY.md)) | 🧑 Tarefa do usuário |
 | 5 | Refinos: regras de categorização editáveis, histórico de fechamentos, exportar CSV, alertas de vencimento | ⏳ |
 
 ### Fase 1 em detalhe (entregue)
@@ -62,10 +62,10 @@ Resumo do que sai dela:
 
 ### Tarefa do usuário 2 · Pluggy / Open Finance (Fase 3)
 
-- [ ] Criar conta em [dashboard.pluggy.ai](https://dashboard.pluggy.ai) e uma aplicação
-- [ ] Copiar `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` para o `.env.local`
-- [ ] Conectar os cartões de cada um com o produto **CREDIT_CARDS** (somente leitura) pelo widget Pluggy Connect
-- [ ] Validar se a cobertura inclui os bancos do casal
+Usaremos o **Meu Pluggy** (uso pessoal gratuito, até 5 conexões, sem uso comercial):
+- [ ] Cada um cria conta em [meu.pluggy.ai](https://meu.pluggy.ai) e autoriza os próprios bancos/cartões via Open Finance
+- [ ] Em [dashboard.pluggy.ai](https://dashboard.pluggy.ai) (mesmo login): criar uma aplicação → Demo → Connect Account → **MeuPluggy**
+- [ ] Copiar `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` (o secret aparece uma vez só) para o `.env.local` / Vercel
 
 Até lá, use o importador (Faturas → Importar) com os arquivos exportados pelo app do banco.
 

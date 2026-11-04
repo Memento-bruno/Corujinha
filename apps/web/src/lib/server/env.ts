@@ -51,7 +51,8 @@ export const env = {
     return v("ENCRYPTION_SECRET");
   },
   get dataDir() {
-    return v("LOCAL_DATA_DIR") ?? ".data";
+    // Na Vercel (e em outros serverless) só /tmp aceita escrita; lá o fallback local é temporário.
+    return v("LOCAL_DATA_DIR") ?? (process.env.VERCEL ? "/tmp/corujinha-data" : ".data");
   },
   get appUrl() {
     return v("AUTH_URL") ?? "http://localhost:3000";
