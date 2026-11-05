@@ -79,6 +79,66 @@ function IncomeCard({ cfg, me, set }: { cfg: HouseholdConfig; me: UserId; set: (
   );
 }
 
+/** Divisão padrão do casal: dá para arrastar ou digitar o percentual de cada um. */
+function DefaultSplit({ cfg, set }: { cfg: HouseholdConfig; set: (fn: (c: HouseholdConfig) => HouseholdConfig) => void }) {
+  const [a, setA] = useState(cfg.defaultSplitPercentA);
+  const [draft, setDraft] = useState<{ A?: string; B?: string }>({});
+  const save = (v: number) => {
+    const n = Math.max(0, Math.min(100, Math.round(v)));
+    setA(n);
+    setDraft({});
+    if (n !== cfg.defaultSplitPercentA) set((c) => ({ ...c, defaultSplitPercentA: n }));
+  };
+  const field = (who: "A" | "B") => {
+    const value = draft[who] ?? String(who === "A" ? a : 100 - a);
+    const commit = () => {
+      const n = Number(String(draft[who] ?? "").replace(",", "."));
+      if (draft[who] === undefined || !Number.isFinite(n)) return setDraft({});
+      save(who === "A" ? n : 100 - n);
+    };
+    const u = who === "A" ? cfg.users.USER_A : cfg.users.USER_B;
+    return (
+      <label className="flex items-center gap-2">
+        <span className={"text-sm font-semibold " + (who === "A" ? "text-brand-600" : "text-emerald-600")}>{u.name.split(" ")[0]}</span>
+        <span className="relative">
+          <Input
+            inputMode="numeric"
+            className="h-10 w-20 pr-7 text-right tabular"
+            value={value}
+            aria-label={`Percentual de ${u.name}`}
+            onChange={(e) => setDraft({ [who]: e.target.value.replace(/[^\d,.]/g, "").slice(0, 5) })}
+            onBlur={commit}
+            onKeyDown={(e) => e.key === "Enter" && commit()}
+          />
+          <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-zinc-500">%</span>
+        </span>
+      </label>
+    );
+  };
+  return (
+    <div className="mt-4 rounded-2xl bg-slate-50 p-3">
+      <p className="mb-2 text-xs font-semibold text-zinc-500">Divisão padrão (arraste ou digite)</p>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        {field("A")}
+        {field("B")}
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={a}
+        onChange={(e) => setA(Number(e.target.value))}
+        onPointerUp={(e) => save(Number((e.target as HTMLInputElement).value))}
+        onKeyUp={(e) => save(Number((e.target as HTMLInputElement).value))}
+        className="w-full accent-zinc-900"
+        aria-label="Divisão padrão"
+      />
+      <p className="mt-1 text-[11px] text-zinc-500">Usada em toda compra marcada como “Divisão padrão”. Ex.: 60/40 para dividir proporcional à renda.</p>
+    </div>
+  );
+}
+
 function MoneyField({ value, onCommit, disabled }: { value: number; onCommit: (c: number) => void; disabled?: boolean }) {
   const [text, setText] = useState(formatBRL(value));
   if (disabled) {
@@ -140,24 +200,7 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
             </label>
           ))}
         </div>
-        <div className="mt-4 rounded-2xl bg-slate-50 p-3">
-          <div className="mb-2 flex justify-between text-xs font-semibold">
-            <span className="text-brand-600">{cfg.users.USER_A.name} {cfg.defaultSplitPercentA}%</span>
-            <span className="text-emerald-600">{cfg.users.USER_B.name} {100 - cfg.defaultSplitPercentA}%</span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            defaultValue={cfg.defaultSplitPercentA}
-            onPointerUp={(e) => set((c) => ({ ...c, defaultSplitPercentA: Number((e.target as HTMLInputElement).value) }))}
-            onKeyUp={(e) => set((c) => ({ ...c, defaultSplitPercentA: Number((e.target as HTMLInputElement).value) }))}
-            className="w-full accent-zinc-900"
-            aria-label="Divisão padrão"
-          />
-          <p className="mt-1 text-[11px] text-zinc-500">Usada em toda compra marcada como “Divisão padrão”. Ex.: 60/40 para dividir proporcional à renda.</p>
-        </div>
+        <DefaultSplit cfg={cfg} set={set} />
       </Card>
 
       <IncomeCard cfg={cfg} me={state!.viewer.userId} set={set} />
