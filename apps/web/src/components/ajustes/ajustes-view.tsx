@@ -1,6 +1,6 @@
 "use client";
 
-import { CloudCheck, ReceiptText, Target, CreditCard as CardIcon, Eye, EyeOff, Wallet, HardDrive, KeyRound, LogOut, Plus, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
+import { ArrowUp, CloudCheck, ReceiptText, Target, CreditCard as CardIcon, Eye, EyeOff, Wallet, HardDrive, KeyRound, LogOut, Plus, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { useDerived } from "@/lib/client/derived";
 import { api, useStore } from "@/lib/client/store";
@@ -302,7 +302,7 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <ul className="space-y-1 text-sm text-zinc-600">
             <li><Eye className="mr-1.5 inline size-4" />Valor completo: R$ 2.536,83</li>
-            <li><b className="mr-1.5 text-xs">10³</b>Resumido: R$ 2,54×10³</li>
+            <li><ArrowUp className="mr-1.5 inline size-4" />Em milhares: R$ 4.260,00 vira R$ 4,26</li>
             <li><EyeOff className="mr-1.5 inline size-4" />Escondido: só porcentagens</li>
           </ul>
           <ValueMode />

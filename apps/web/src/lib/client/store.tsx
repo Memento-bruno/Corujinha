@@ -53,7 +53,7 @@ interface Store {
   setMonth: (m: MonthKey) => void;
   privacy: boolean;
   setPrivacy: (v: boolean) => void;
-  /** Valores em 10³ com 2 casas decimais (ex.: R$ 2,54×10³). */
+  /** Valores em milhares com 2 casas, sem a potência (ex.: R$ 4,26 = R$ 4.260). */
   sci: boolean;
   setSci: (v: boolean) => void;
   view: ViewFilter;

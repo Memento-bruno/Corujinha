@@ -4,29 +4,35 @@ import { useEffect, useState } from "react";
 
 /** Largura em que a tela do computador cabe com tudo lado a lado. */
 export const DESKTOP_WIDTH = 920;
-const DEFAULT_VIEWPORT = "width=device-width, initial-scale=1";
 
 /**
- * No celular, todas as telas mostram a mesma arrumação do computador, só que encolhida (pedido do Bruno):
- * o navegador desenha a página com 920px de largura e encolhe para caber na tela (dá para ampliar com os dedos).
- * Devolve o zoom para o menu de baixo continuar no tamanho normal de toque.
+ * No celular, todas as telas mostram a arrumação do computador, só que encolhida (pedido do Bruno).
+ * Quem faz isso é a meta viewport fixa `width=920`, que vem pronta do servidor em app/(app)/layout.tsx:
+ * nada muda depois que a página abre (no iPhone, trocar a viewport com a página aberta faz a tela pular).
+ *
+ * Aqui só calculamos quanto o navegador encolheu a página, para o menu de baixo voltar ao tamanho
+ * normal de toque. A conta usa a largura real da tela (que não muda ao dar zoom com os dedos), então
+ * o menu fica parado. Computador (sem encolher) => 1.
  */
-export function useDesktopViewport(enabled: boolean): number {
-  const [navZoom, setNavZoom] = useState(1);
+export function useNavZoom(): number {
+  const [zoom, setZoom] = useState(1);
   useEffect(() => {
-    const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
-    if (!meta) return;
-    const original = meta.getAttribute("content") || DEFAULT_VIEWPORT;
-    const device = window.screen.width;
-    if (enabled && device < DESKTOP_WIDTH) {
-      meta.setAttribute("content", `width=${DESKTOP_WIDTH}, initial-scale=${(device / DESKTOP_WIDTH).toFixed(3)}`);
-      setNavZoom(DESKTOP_WIDTH / device);
-    } else {
-      setNavZoom(1);
-    }
-    return () => {
-      meta.setAttribute("content", original.startsWith(`width=${DESKTOP_WIDTH}`) ? DEFAULT_VIEWPORT : original);
+    const update = () => {
+      const layout = document.documentElement.clientWidth;
+      const landscape = window.matchMedia("(orientation: landscape)").matches;
+      const { width, height } = window.screen;
+      const physical = landscape ? Math.max(width, height) : Math.min(width, height);
+      // 0,8: o menu fica um pouco menor que um menu comum de celular, para não tomar a tela.
+      const z = physical > 0 && layout > physical ? (layout / physical) * 0.8 : 1;
+      setZoom(Math.min(3, Math.round(z * 100) / 100));
     };
-  }, [enabled]);
-  return navZoom;
+    update();
+    window.addEventListener("orientationchange", update);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("orientationchange", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+  return zoom;
 }

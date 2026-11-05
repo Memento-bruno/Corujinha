@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useDerived, useFmt } from "@/lib/client/derived";
+import { useDragScroll } from "@/lib/client/use-drag-scroll";
 import { useReveal } from "@/lib/client/use-reveal";
 import { sumCents } from "@/lib/engines/analytics";
 import { CreditCardVisual } from "./credit-card";
@@ -11,6 +12,7 @@ export function CardsStrip() {
   const d = useDerived();
   const fmt = useFmt(d.spend.card);
   const [ref, shown] = useReveal<HTMLElement>();
+  const [rowRef, drag] = useDragScroll<HTMLDivElement>();
   // Do cartão que mais gastou para o que menos gastou.
   const cards = d.config.cards
     .map((c) => ({ c, total: sumCents(d.allTxs.filter((t) => t.cardId === c.id)) }))
@@ -30,11 +32,11 @@ export function CardsStrip() {
       {cards.length === 0 ? (
         <p className="mt-4 rounded-2xl bg-zinc-50 p-4 text-sm text-zinc-500">Nenhum cartão cadastrado. Adicione em Configurações.</p>
       ) : (
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div ref={rowRef} {...drag} className="no-scrollbar -mx-4 mt-4 flex cursor-grab snap-x gap-3 overflow-x-auto px-4 pb-1 select-none active:cursor-grabbing sm:-mx-6 sm:px-6">
           {cards.map(({ c, total }, i) => (
             <div
               key={c.id}
-              className="min-w-0 transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none"
+              className="w-[200px] shrink-0 snap-start transition-[opacity,transform] duration-500 ease-out motion-reduce:transition-none"
               style={{ opacity: shown ? 1 : 0, transform: shown ? "none" : "translateY(12px)", transitionDelay: `${i * 90}ms` }}
             >
               <div className="relative">
