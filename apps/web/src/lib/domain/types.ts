@@ -94,9 +94,22 @@ export interface HouseholdConfig {
   savingsRules: SavingsRulesConfig;
   /** Estabelecimentos marcados pelo casal como assinatura (merchantKey). */
   subscriptionMerchants: string[];
+  /**
+   * Memória de fornecedores (por merchantKey): setor e divisão que o casal escolheu da última vez.
+   * Compra nova do mesmo fornecedor já chega com eles.
+   */
+  merchantRules?: Record<string, MerchantRule>;
   /** Conexões Open Finance (Meu Pluggy). O itemId sozinho não dá acesso a nada sem o client secret. */
   pluggyItems?: PluggyItemLink[];
   pluggyLastSyncAt?: string;
+  updatedAt: string;
+}
+
+export interface MerchantRule {
+  /** Nome para mostrar (descrição da última compra editada). */
+  name: string;
+  category?: CategoryId;
+  split?: Split;
   updatedAt: string;
 }
 

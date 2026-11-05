@@ -97,6 +97,13 @@ export const configSchema = z.object({
     highFrequencyMinOccurrences: z.number().int().min(2).max(100),
   }),
   subscriptionMerchants: z.array(z.string().max(80)).max(200),
+  merchantRules: z
+    .record(
+      z.string().min(1).max(80),
+      z.object({ name: shortText, category: category.optional(), split: splitSchema.optional(), updatedAt: z.string().max(40) }),
+    )
+    .refine((r) => Object.keys(r).length <= 3000, { message: "Fornecedores demais." })
+    .optional(),
   pluggyItems: z
     .array(z.object({ itemId: z.string().regex(/^[0-9a-f-]{36}$/i, "itemId inválido"), owner: userId }))
     .max(10)

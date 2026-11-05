@@ -1,6 +1,6 @@
 "use client";
 
-import { CloudCheck, CreditCard as CardIcon, Eye, EyeOff, Wallet, HardDrive, KeyRound, LogOut, Plus, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
+import { CloudCheck, ReceiptText, Target, CreditCard as CardIcon, Eye, EyeOff, Wallet, HardDrive, KeyRound, LogOut, Plus, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { useDerived } from "@/lib/client/derived";
 import { api, useStore } from "@/lib/client/store";
@@ -13,7 +13,24 @@ import { Card, CardHeader } from "../ui/card";
 import { Input, Label, Select } from "../ui/field";
 import { IconBox } from "../ui/icon-box";
 import { Sheet } from "../ui/sheet";
+import { MerchantsCard } from "./merchants-card";
 import { OpenFinanceCard } from "./open-finance-card";
+import { SubscriptionsCard } from "./subscriptions-card";
+import { RecurringTab } from "../faturas/recurring-tab";
+import { ValueMode } from "../shell/value-mode";
+
+const SECTIONS = [
+  ["casal", "Casal"],
+  ["renda", "Renda"],
+  ["metas", "Meta e tetos"],
+  ["cartoes", "Cartões"],
+  ["contas", "Contas e vencimentos"],
+  ["fornecedores", "Fornecedores"],
+  ["assinaturas", "Assinaturas"],
+  ["valores", "Valores"],
+  ["open-finance", "Banco"],
+  ["seguranca", "Segurança"],
+] as const;
 
 /** Renda do casal: cada um coloca o próprio salário líquido. O valor nunca aparece em outra tela, só porcentagens. */
 function IncomeCard({ cfg, me, set }: { cfg: HouseholdConfig; me: UserId; set: (fn: (c: HouseholdConfig) => HouseholdConfig) => void }) {
@@ -98,45 +115,15 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
   return (
     <div className="space-y-4 pt-1">
       <h2 className="text-base font-semibold text-zinc-900">Configurações</h2>
+      <nav aria-label="Seções" className="no-scrollbar -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        {SECTIONS.map(([id, label]) => (
+          <a key={id} href={`#${id}`} className="h-9 shrink-0 rounded-full border border-zinc-200 bg-white px-3.5 text-sm leading-9 font-semibold whitespace-nowrap text-zinc-800 hover:bg-zinc-50">
+            {label}
+          </a>
+        ))}
+      </nav>
 
-      <Card>
-        <CardHeader icon={<IconBox>{mode.storage === "drive" ? <CloudCheck /> : <HardDrive />}</IconBox>} title="Armazenamento e segurança" />
-        <ul className="space-y-2 text-sm">
-          <li className="flex justify-between gap-3"><span className="text-zinc-500">Banco de dados</span><b>{mode.storage === "drive" ? "Google Drive (pasta compartilhada)" : "Local (.data/)"}</b></li>
-          <li className="flex justify-between gap-3"><span className="text-zinc-500">Criptografia AES-256-GCM</span><b className={mode.encrypted ? "text-emerald-600" : "text-amber-600"}>{mode.encrypted ? "Ativa" : "Desligada (defina ENCRYPTION_SECRET)"}</b></li>
-          <li className="flex justify-between gap-3"><span className="text-zinc-500">Login Google</span><b>{mode.authConfigured ? "Configurado (2 e-mails)" : "Modo demo, sem login"}</b></li>
-          <li className="flex justify-between gap-3"><span className="text-zinc-500">Drive configurado</span><b>{mode.driveConfigured ? "Sim" : "Não"}</b></li>
-        </ul>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {mode.authConfigured && !mode.driveConfigured && (
-            <Button variant="outline" size="sm" asChild>
-              <a href="/api/drive/connect"><KeyRound /> Gerar refresh token do Drive</a>
-            </Button>
-          )}
-          {mode.storage === "local" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                await api("/api/demo/reset", { method: "POST" });
-                toast("Dados de demonstração restaurados.", "success");
-                await reload();
-              }}
-            >
-              <RotateCcw /> Restaurar dados de demonstração
-            </Button>
-          )}
-          {!mode.demo && (
-            <form action={signOutAction}>
-              <Button variant="danger" size="sm" type="submit"><LogOut /> Sair</Button>
-            </form>
-          )}
-        </div>
-      </Card>
-
-      <OpenFinanceCard config={cfg} />
-
-      <Card>
+      <Card id="casal">
         <CardHeader icon={<IconBox><Users /></IconBox>} title="Casal e divisão padrão" />
         <div className="grid gap-3 sm:grid-cols-2">
           {(["USER_A", "USER_B"] as UserId[]).map((u) => (
@@ -175,8 +162,8 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
 
       <IncomeCard cfg={cfg} me={state!.viewer.userId} set={set} />
 
-      <Card>
-        <CardHeader title="Meta e tetos por setor" subtitle="Base do medidor de saúde e dos alertas de estouro" />
+      <Card id="metas">
+        <CardHeader icon={<IconBox><Target /></IconBox>} title="Meta do mês e tetos por setor" subtitle="Base do velocímetro, da saúde financeira e dos alertas" />
         <label className="mb-3 block">
           <Label>Meta mensal das faturas</Label>
           <MoneyField value={cfg.monthlyGoal} disabled={privacy} onCommit={(v) => set((c) => ({ ...c, monthlyGoal: v }))} />
@@ -237,10 +224,10 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
             </Button>
           }
         />
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {cfg.cards.map((c) => (
-            <div key={c.id}>
-              <CreditCardVisual card={c} ownerName={cfg.users[c.owner].name} />
+            <div key={c.id} className="min-w-0">
+              <CreditCardVisual compact card={c} ownerName={cfg.users[c.owner].name} />
               <button
                 className="mt-1.5 inline-flex items-center gap-1 px-1 text-xs font-semibold text-rose-600"
                 onClick={() => {
@@ -257,6 +244,71 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
           ))}
         </div>
       </Card>
+
+      <Card id="contas">
+        <CardHeader icon={<IconBox><ReceiptText /></IconBox>} title="Contas fixas, boletos e vencimentos" subtitle="Aluguel, condomínio, água, internet, parcela do carro e compras do cartão que se repetem" />
+        <RecurringTab />
+      </Card>
+
+      <MerchantsCard cfg={cfg} set={set} />
+
+      <SubscriptionsCard cfg={cfg} set={set} />
+
+      <Card id="valores">
+        <CardHeader icon={<IconBox><Eye /></IconBox>} title="Como mostrar os valores" subtitle="Vale para todas as telas, neste aparelho" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <ul className="space-y-1 text-sm text-zinc-600">
+            <li><Eye className="mr-1.5 inline size-4" />Valor completo: R$ 2.536,83</li>
+            <li><b className="mr-1.5 text-xs">10³</b>Resumido: R$ 2,54×10³</li>
+            <li><EyeOff className="mr-1.5 inline size-4" />Escondido: só porcentagens</li>
+          </ul>
+          <ValueMode />
+        </div>
+      </Card>
+
+      <OpenFinanceCard config={cfg} />
+
+      <Card id="seguranca">
+        <CardHeader icon={<IconBox>{mode.storage === "drive" ? <CloudCheck /> : <HardDrive />}</IconBox>} title="Armazenamento e segurança" />
+        <ul className="space-y-2 text-sm">
+          <li className="flex justify-between gap-3"><span className="text-zinc-500">Banco de dados</span><b>{mode.storage === "drive" ? "Google Drive (pasta compartilhada)" : "Local (.data/)"}</b></li>
+          <li className="flex justify-between gap-3"><span className="text-zinc-500">Criptografia AES-256-GCM</span><b className={mode.encrypted ? "text-emerald-600" : "text-amber-600"}>{mode.encrypted ? "Ativa" : "Desligada (defina ENCRYPTION_SECRET)"}</b></li>
+          <li className="flex justify-between gap-3"><span className="text-zinc-500">Login Google</span><b>{mode.authConfigured ? "Configurado (2 e-mails)" : "Modo demo, sem login"}</b></li>
+          <li className="flex justify-between gap-3"><span className="text-zinc-500">Drive configurado</span><b>{mode.driveConfigured ? "Sim" : "Não"}</b></li>
+        </ul>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {mode.authConfigured && !mode.driveConfigured && (
+            <Button variant="outline" size="sm" asChild>
+              <a href="/api/drive/connect"><KeyRound /> Gerar refresh token do Drive</a>
+            </Button>
+          )}
+          {mode.storage === "local" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await api("/api/demo/reset", { method: "POST" });
+                toast("Dados de demonstração restaurados.", "success");
+                await reload();
+              }}
+            >
+              <RotateCcw /> Restaurar dados de demonstração
+            </Button>
+          )}
+          {!mode.demo && (
+            <form action={signOutAction}>
+              <Button variant="danger" size="sm" type="submit"><LogOut /> Sair</Button>
+            </form>
+          )}
+        </div>
+      </Card>
+
+
+
+
+
+
+
 
       <p className="flex items-center justify-center gap-1.5 pb-4 text-center text-[11px] text-zinc-400">
         <ShieldCheck className="size-3.5" /> Somente leitura: o Corujinha nunca faz pagamentos, Pix ou transferências.
