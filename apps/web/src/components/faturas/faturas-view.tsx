@@ -9,11 +9,10 @@ import { useDragScroll } from "@/lib/client/use-drag-scroll";
 import { useReveal } from "@/lib/client/use-reveal";
 import { addMonths, monthName } from "@/lib/domain/months";
 import type { RecurringDebt, Transaction } from "@/lib/domain/types";
-import { sumCents, type ViewFilter } from "@/lib/engines/analytics";
+import { sumCents } from "@/lib/engines/analytics";
 import { cn } from "@/lib/utils";
 import { PERSON } from "../home/colors";
 import { CreditCardVisual } from "../home/credit-card";
-import { Segmented } from "../ui/segmented";
 import { Sheet } from "../ui/sheet";
 import { ImportTab } from "./import-tab";
 import { ManualPurchaseSheet } from "./manual-purchase";
@@ -37,7 +36,7 @@ function ago(iso?: string): string | null {
 }
 
 export function FaturasView() {
-  const { state, view, setView, syncBank, bankSyncing } = useStore();
+  const { state, view, syncBank, bankSyncing } = useStore();
   const d = useDerived();
   const fmt = useFmt(d.coupleTotal);
   const [cardId, setCardId] = useState<string | null>(null);
@@ -50,6 +49,8 @@ export function FaturasView() {
     const t = new URLSearchParams(window.location.search).get("tab");
     if (t === "recorrentes" || t === "importar") setSheet(t);
   }, []);
+  // Trocou a pessoa no topo: volta a mostrar todos os cartões dela.
+  useEffect(() => setCardId(null), [view]);
 
   const bankReady = state!.mode.pluggyConfigured && (d.config.pluggyItems?.length ?? 0) > 0;
   const closed = Boolean(d.snapshot);
@@ -124,18 +125,6 @@ export function FaturasView() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:items-end">
-            <Segmented<ViewFilter>
-              value={view}
-              onChange={(v) => {
-                setView(v);
-                setCardId(null);
-              }}
-              options={[
-                { value: "COUPLE", label: "Casal" },
-                { value: "USER_A", label: first("USER_A") },
-                { value: "USER_B", label: first("USER_B") },
-              ]}
-            />
             {bankReady ? (
               <>
                 <button className={pillBtn} disabled={bankSyncing} onClick={() => void syncBank()}>

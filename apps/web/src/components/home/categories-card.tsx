@@ -18,8 +18,8 @@ export function CategoriesCard() {
   const d = useDerived();
   const fmt = useFmt(d.spend.total);
   const totals = new Map<CategoryId, number>();
-  for (const t of d.allTxs) totals.set(t.category, (totals.get(t.category) ?? 0) + t.amount);
-  for (const debt of state!.recurring.data.debts) {
+  for (const t of d.txs) totals.set(t.category, (totals.get(t.category) ?? 0) + t.amount);
+  for (const debt of d.viewDebts) {
     if (debt.kind !== "CARTAO" && isDebtActiveIn(debt, d.month)) totals.set(debt.category, (totals.get(debt.category) ?? 0) + debt.amount);
   }
   const rows = [...totals.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);

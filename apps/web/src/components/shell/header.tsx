@@ -3,10 +3,11 @@
 import { useStore } from "@/lib/client/store";
 import { Logo } from "../brand/logo";
 import { MonthStrip } from "./month-strip";
+import { PersonFilter } from "./person-filter";
 import { SyncBadge } from "./sync-badge";
 import { ValueMode } from "./value-mode";
 
-/** Topo: logo, faixa de meses e formato dos valores na mesma linha. */
+/** Topo: logo, faixa de meses, de quem mostrar (casal ou um dos dois) e formato dos valores. */
 export function Header() {
   const { state, sync } = useStore();
   if (!state) return null;
@@ -27,7 +28,10 @@ export function Header() {
             <MonthStrip />
           </div>
         </div>
-        <ValueMode />
+        <div className="flex shrink-0 items-center gap-2">
+          <PersonFilter />
+          <ValueMode />
+        </div>
       </div>
     </header>
   );
