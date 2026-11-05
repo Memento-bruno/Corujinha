@@ -189,6 +189,66 @@ describe("faturas futuras", () => {
     );
     expect([...out.keys()]).toEqual(["2026-10"]);
   });
+  it("banco que só lança parcelas no fechamento (XP): prevê a partir da última fatura fechada", () => {
+    const out = mapCardTransactions(
+      [
+        tx("p", 100, { description: "LOJA P", creditCardMetadata: { installmentNumber: 2, totalInstallments: 4, billId: "b10" } }),
+        tx("q", 20, { description: "MERCADO", date: "2026-10-25T00:00:00Z" }),
+      ],
+      card,
+      bills,
+      [],
+    );
+    const sum = (m: string) => (out.get(m) ?? []).reduce((s, t) => s + t.amount, 0);
+    expect(sum("2026-11")).toBe(12000);
+    expect(sum("2026-12")).toBe(10000);
+    expect(out.has("2027-01")).toBe(false);
+  });
+  it("banco que já informa as parcelas futuras (Nubank): usa o mês previsto e não duplica", () => {
+    const fut = (n: number, forecast: string) =>
+      tx(`f${n}`, 50, {
+        description: "LOJA F",
+        status: "PENDING",
+        date: `${forecast}-01T00:00:00Z`,
+        creditCardMetadata: { installmentNumber: n, totalInstallments: 4, billForecastDate: forecast },
+      });
+    const out = mapCardTransactions(
+      [
+        tx("f2", 50, { description: "LOJA F", creditCardMetadata: { installmentNumber: 2, totalInstallments: 4, billId: "b10" } }),
+        fut(3, "2026-11"),
+        fut(4, "2026-12"),
+      ],
+      card,
+      bills,
+      [],
+    );
+    expect(out.get("2026-11")!.map((t) => t.externalId)).toEqual(["pluggy:f3"]);
+    expect(out.get("2026-12")!.map((t) => t.externalId)).toEqual(["pluggy:f4"]);
+    expect(out.has("2027-01")).toBe(false);
+  });
+  it("ignora pendente antigo que já está numa fatura fechada", () => {
+    const out = mapCardTransactions(
+      [
+        tx("a", 10, { creditCardMetadata: { billId: "b10" } }),
+        tx("old", 98.51, { status: "PENDING", date: "2026-09-25T00:00:00Z", creditCardMetadata: { billForecastDate: "2026-10" } }),
+      ],
+      card,
+      [{ id: "b10", dueDate: "2026-10-10", billClosingDate: "2026-10-01" }],
+      [],
+    );
+    expect([...out.keys()]).toEqual(["2026-10"]);
+  });
+  it("completa a fatura fechada com o que o banco cobrou e não veio como compra", () => {
+    const out = mapCardTransactions(
+      [tx("a", 100, { creditCardMetadata: { billId: "b10" } })],
+      card,
+      [{ id: "b10", dueDate: "2026-10-10", totalAmount: 305 }],
+      [],
+    );
+    const list = out.get("2026-10")!;
+    expect(list.reduce((s, t) => s + t.amount, 0)).toBe(30500);
+    expect(list.find((t) => t.externalId === "pluggy:ajuste:b10")!.amount).toBe(20500);
+  });
   it("ignora lançamento sem fatura válida (0001-01)", () => {
     const out = mapCardTransactions(
       [tx("z", 274.9, { creditCardMetadata: { installmentNumber: 3, totalInstallments: 10, billForecastDate: "0001-01" } })],
