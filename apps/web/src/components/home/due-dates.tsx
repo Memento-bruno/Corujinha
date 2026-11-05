@@ -22,7 +22,7 @@ export function DueDates() {
   const today = todayBR();
   const [y, m] = d.month.split("-");
   const lastDay = new Date(Number(y), Number(m), 0).getDate();
-  const items = state!.recurring.data.debts
+  const items = d.viewDebts
     .filter((x) => x.kind !== "CARTAO" && isDebtActiveIn(x, d.month))
     .map((x) => {
       const day = Math.min(x.dueDay, lastDay);

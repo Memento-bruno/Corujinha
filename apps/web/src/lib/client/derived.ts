@@ -133,13 +133,22 @@ function useDerivedOptional() {
     // --- Tela Início: cartão + contas fora do cartão, histórico e previsão ---
     const openMonth = state.openMonth ?? month;
     const cardOf = (m: MonthKey) => cardTxsFor(byMonth, debts, m, openMonth);
-    const spendOf = (m: MonthKey) => monthSpend(cardOf(m), debts, m, openMonth, cfg.monthlyGoal);
+    const coupleSpendOf = (m: MonthKey) => monthSpend(cardOf(m), debts, m, openMonth, cfg.monthlyGoal);
+    // Filtro de pessoa (topo): só o que passa no cartão ou nas contas de quem foi escolhido.
+    // A meta de uma pessoa é a parte dela na divisão padrão.
+    const viewDebts = view === "COUPLE" ? debts : debts.filter((x) => x.paidBy === view);
+    const goal =
+      view === "COUPLE"
+        ? cfg.monthlyGoal
+        : Math.round((cfg.monthlyGoal * (view === "USER_A" ? cfg.defaultSplitPercentA : 100 - cfg.defaultSplitPercentA)) / 100);
+    const viewCardOf = (m: MonthKey) => filterByView(cardOf(m), view);
+    const spendOf = (m: MonthKey) => monthSpend(viewCardOf(m), viewDebts, m, openMonth, goal);
     const spend = spendOf(month);
-    /** Faixa de meses do topo: fixa em volta da fatura em aberto. */
-    const strip = monthRange(addMonths(openMonth, 5), 12).map(spendOf);
+    /** Faixa de meses do topo: fixa em volta da fatura em aberto (sempre do casal). */
+    const strip = monthRange(addMonths(openMonth, 5), 12).map(coupleSpendOf);
     /** Linha de evolução: 4 meses antes, o mês e 4 depois. */
     const timeline = monthRange(addMonths(month, 4), 9).map(spendOf);
-    const composition = timeline.map((s) => ({ ...s, parts: monthComposition(cardOf(s.month), debts, s.month) }));
+    const composition = timeline.map((s) => ({ ...s, parts: monthComposition(viewCardOf(s.month), viewDebts, s.month) }));
     const income = incomeUsage(settlement.grossTotal, settlement.fairShare, cfg.incomes);
     const healthOf = (m: MonthKey, sp: number, futureInst: number) =>
       financialHealth({
@@ -150,9 +159,10 @@ function useDerivedOptional() {
         paidRatio: billsPaidRatio(statements[addMonths(m, -1)]?.data.bankBills),
       });
     const nextInstallments = projectInstallments(allTxs, month, 1)[0]?.total ?? 0;
-    const prevSpend = spendOf(prevMonth);
+    const prevSpend = coupleSpendOf(prevMonth);
+    const coupleSpend = coupleSpendOf(month);
     const prevInstallments = projectInstallments(byMonth[prevMonth] ?? [], prevMonth, 1)[0]?.total ?? 0;
-    const finHealth = healthOf(month, spend.total, nextInstallments);
+    const finHealth = healthOf(month, coupleSpend.total, nextInstallments);
     const prevFinHealth = prevSpend.status === "empty" ? null : healthOf(prevMonth, prevSpend.total, prevInstallments);
     const engine = new RuleBasedSavingsEngine({ month, byMonth, config: cfg });
     const recommendations = engine.analyze();
@@ -189,6 +199,9 @@ function useDerivedOptional() {
       subscriptions,
       snapshot: statements[month]?.data.snapshot,
       openMonth,
+      view,
+      viewDebts,
+      goal,
       spend,
       strip,
       timeline,

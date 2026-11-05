@@ -77,6 +77,7 @@ const Ctx = createContext<Store | null>(null);
 
 const PRIVACY_KEY = "corujinha:privacy";
 const SCI_KEY = "corujinha:sci";
+const VIEW_KEY = "corujinha:view";
 
 export interface BankSyncSummary {
   added: number;
@@ -122,7 +123,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [month, setMonthState] = useState<MonthKey | null>(null);
   const [privacy, setPrivacyState] = useState(false);
   const [sci, setSciState] = useState(false);
-  const [view, setView] = useState<ViewFilter>("COUPLE");
+  const [view, setViewState] = useState<ViewFilter>("COUPLE");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [bankSyncing, setBankSyncing] = useState(false);
   const [firstSync, setFirstSync] = useState(false);
@@ -142,8 +143,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       setPrivacyState(localStorage.getItem(PRIVACY_KEY) === "1");
       setSciState(localStorage.getItem(SCI_KEY) === "1");
+      const v = localStorage.getItem(VIEW_KEY);
+      if (v === "USER_A" || v === "USER_B" || v === "COUPLE") setViewState(v);
     } catch {
       /* armazenamento indisponível */
+    }
+  }, []);
+
+  /** De quem mostrar (casal ou um dos dois). Fica lembrado neste aparelho. */
+  const setView = useCallback((v: ViewFilter) => {
+    setViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* ignore */
     }
   }, []);
 

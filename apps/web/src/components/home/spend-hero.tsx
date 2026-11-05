@@ -22,8 +22,9 @@ export function SpendHero() {
   const { spend, settlement, income, users } = d;
   const total = spend.total;
   const status = spend.forecast ? { label: "Previsto", tone: "bg-zinc-100 text-zinc-700" } : billStatus(state!.statements[d.month]?.data, d.month);
-  const share = (u: UserId) => (total > 0 ? (settlement.fairShare[u] / total) * 100 : 50);
-  const goal = d.config.monthlyGoal;
+  const coupleTotal = USERS.reduce((x, u) => x + settlement.fairShare[u], 0);
+  const share = (u: UserId) => (coupleTotal > 0 ? (settlement.fairShare[u] / coupleTotal) * 100 : 50);
+  const goal = d.goal;
   const ratio = goal > 0 ? total / goal : 0;
   const goalChip =
     ratio > 1
@@ -40,7 +41,7 @@ export function SpendHero() {
       <div className="flex min-w-0 flex-[1_1_340px] flex-col gap-3.5">
         <div className="flex flex-wrap items-center gap-2">
           <h1 id="gastos-title" className="text-base font-bold text-zinc-900 sm:text-lg">
-            Gastos de {monthName(d.month)}
+            Gastos {d.view !== "COUPLE" ? `de ${first(users[d.view].name)} em` : "de"} {monthName(d.month)}
           </h1>
           {status && <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${status.tone}`}>{status.label}</span>}
         </div>

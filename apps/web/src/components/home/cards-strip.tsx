@@ -15,7 +15,8 @@ export function CardsStrip() {
   const [rowRef, drag] = useDragScroll<HTMLDivElement>();
   // Do cartão que mais gastou para o que menos gastou.
   const cards = d.config.cards
-    .map((c) => ({ c, total: sumCents(d.allTxs.filter((t) => t.cardId === c.id)) }))
+    .filter((c) => d.view === "COUPLE" || c.owner === d.view)
+    .map((c) => ({ c, total: sumCents(d.txs.filter((t) => t.cardId === c.id)) }))
     .sort((a, b) => b.total - a.total);
   const top = Math.max(1, cards[0]?.total ?? 1);
   return (

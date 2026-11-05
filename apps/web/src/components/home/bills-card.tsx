@@ -13,7 +13,7 @@ export function BillsCard() {
   const d = useDerived();
   const fmt = useFmt(d.spend.total);
   const [editing, setEditing] = useState<RecurringDebt | null>(null);
-  const debts = state!.recurring.data.debts.filter((x) => isDebtActiveIn(x, d.month)).sort((a, b) => a.dueDay - b.dueDay);
+  const debts = d.viewDebts.filter((x) => isDebtActiveIn(x, d.month)).sort((a, b) => a.dueDay - b.dueDay);
   const total = debts.reduce((s, x) => s + x.amount, 0);
   return (
     <section aria-labelledby="fix-title" className="min-w-0 flex-[1_1_340px] rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6">
