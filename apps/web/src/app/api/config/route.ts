@@ -5,6 +5,16 @@ import { configSchema, etagSchema } from "@/lib/server/schemas";
 import { requireViewer } from "@/lib/server/session";
 import { otherUser, type HouseholdConfig } from "@/lib/domain/types";
 
+export const dynamic = "force-dynamic";
+
+/** Versão mais nova do cadastro (usada para juntar edições quando outro aparelho gravou antes). */
+export async function GET() {
+  return handle(async () => {
+    await requireViewer();
+    return (await getDatabase()).getConfig();
+  });
+}
+
 export async function PUT(req: Request) {
   return handle(async () => {
     const viewer = await requireViewer();

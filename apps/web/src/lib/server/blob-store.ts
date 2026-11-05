@@ -13,6 +13,8 @@ export interface BlobStore {
    */
   write(name: string, content: string, expectedEtag: string | null): Promise<{ etag: string }>;
   list(prefix: string): Promise<string[]>;
+  /** ETag de cada arquivo (nome → ETag), numa só consulta: serve para ver o que mudou em outro aparelho. */
+  versions(): Promise<Record<string, string>>;
   remove(name: string): Promise<void>;
 }
 
