@@ -53,7 +53,17 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
       await openPluggyConnect({
         itemId: existing,
         onSuccess: async (id) => {
-          if (!existing) await saveItem(id);
+          if (!existing) {
+            const already = items.find((i) => i.itemId === id.trim().toLowerCase());
+            if (already) {
+              toast(
+                `Essa conexão já estava cadastrada (${config.users[already.owner].name}). Para conectar outra pessoa, entre com a conta do Meu Pluggy dela, não com a sua.`,
+                "info",
+              );
+              return;
+            }
+            await saveItem(id);
+          }
           toast(existing ? "Conexão renovada. Buscando as compras…" : "Banco conectado. Buscando as compras…", "success");
           await syncBank();
         },
