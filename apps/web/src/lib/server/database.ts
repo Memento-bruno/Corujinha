@@ -94,6 +94,11 @@ export class DriveDatabaseService {
     return this.writeJson(FILES.statement(file.month), { ...file, updatedAt: new Date().toISOString() }, etag);
   }
 
+  /** ETag atual de cada arquivo, numa só consulta (para os aparelhos verem o que mudou). */
+  versions(): Promise<Record<string, string>> {
+    return this.store.versions();
+  }
+
   async listStatementMonths(): Promise<MonthKey[]> {
     const names = await this.store.list("statements-");
     return names

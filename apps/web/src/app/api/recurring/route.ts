@@ -5,6 +5,16 @@ import { etagSchema, recurringSchema } from "@/lib/server/schemas";
 import { requireViewer } from "@/lib/server/session";
 import type { RecurringDebtsFile } from "@/lib/domain/types";
 
+export const dynamic = "force-dynamic";
+
+/** Versão mais nova das contas fixas. */
+export async function GET() {
+  return handle(async () => {
+    await requireViewer();
+    return (await getDatabase()).getRecurring();
+  });
+}
+
 export async function PUT(req: Request) {
   return handle(async () => {
     await requireViewer();

@@ -116,6 +116,42 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
 
 export { api };
 
+/** Quantas vezes juntar a edição com uma versão mais nova antes de desistir. */
+const MAX_MERGE_ATTEMPTS = 4;
+/** De quanto em quanto tempo procurar mudanças feitas em outro aparelho. */
+const REFRESH_EVERY_MS = 15_000;
+
+/** Um arquivo do Drive: onde ele fica no estado e em qual endereço da API. */
+interface Slot<T> {
+  file: string;
+  url: string;
+  get: (s: AppState | null) => Versioned<T> | undefined;
+  set: (s: AppState, v: Versioned<T>) => AppState;
+}
+
+const configSlot: Slot<HouseholdConfig> = {
+  file: "household-config.json",
+  url: "/api/config",
+  get: (s) => s?.config,
+  set: (s, v) => ({ ...s, config: v }),
+};
+
+const recurringSlot: Slot<RecurringDebtsFile> = {
+  file: "recurring-debts.json",
+  url: "/api/recurring",
+  get: (s) => s?.recurring,
+  set: (s, v) => ({ ...s, recurring: v }),
+};
+
+function statementSlot(m: MonthKey): Slot<StatementFile> {
+  return {
+    file: `statements-${m}.json`,
+    url: `/api/statements/${m}`,
+    get: (s) => s?.statements[m],
+    set: (s, v) => ({ ...s, statements: { ...s.statements, [m]: v } }),
+  };
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -128,10 +164,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [bankSyncing, setBankSyncing] = useState(false);
   const [firstSync, setFirstSync] = useState(false);
   const autoSynced = useRef(false);
+  // Cópia sempre em dia do estado. Atualizada na hora (não só quando a tela redesenha):
+  // a próxima gravação da fila precisa ver o ETag e os dados que a anterior acabou de salvar.
   const stateRef = useRef<AppState | null>(null);
-  stateRef.current = state;
-  // Fila de gravações: garante que cada gravação use o ETag mais recente.
+  const commit = useCallback((fn: (s: AppState | null) => AppState | null) => {
+    stateRef.current = fn(stateRef.current);
+    setState(stateRef.current);
+  }, []);
+  // Fila de gravações: uma de cada vez, sempre a partir da versão mais nova.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+  // Gravações na fila ou em andamento: enquanto houver, não trazemos dados de outro aparelho.
+  const pending = useRef(0);
 
   const toast = useCallback((message: string, tone: Toast["tone"] = "info") => {
     const id = Date.now() + Math.random();
@@ -184,7 +227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const s = await api<AppState>(`/api/state${m ? `?month=${m}` : ""}`);
       // Guarda os meses já lidos: trocar de mês depois não precisa ir ao Drive de novo.
-      setState((prev) => (prev && keep ? { ...s, statements: { ...prev.statements, ...s.statements } } : s));
+      commit((prev) => (prev && keep ? { ...s, statements: { ...prev.statements, ...s.statements } } : s));
       setMonthState(s.month);
       setError(null);
       setSync("synced");
@@ -196,7 +239,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setError((e as Error).message);
       setSync("error");
     }
-  }, []);
+  }, [commit]);
 
   useEffect(() => {
     void load();
@@ -209,18 +252,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (m: MonthKey) => {
       const cur = stateRef.current;
       if (cur && monthRange(m, 6).every((k) => cur.statements[k])) {
-        setState((s) => (s ? { ...s, month: m } : s));
+        commit((s) => (s ? { ...s, month: m } : s));
         setMonthState(m);
         return;
       }
       void load(m, true);
     },
-    [load],
+    [load, commit],
   );
 
   const enqueue = useCallback(
     <T,>(job: () => Promise<T>): Promise<T> => {
-      const run = queue.current.then(job, job);
+      pending.current++;
+      const run = queue.current.then(job, job).finally(() => {
+        pending.current--;
+      });
       queue.current = run.catch(() => undefined);
       return run;
     },
@@ -229,108 +275,157 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const handleError = useCallback(
     async (e: unknown) => {
-      if (e instanceof HttpError && e.status === 409) {
-        setSync("conflict");
-        toast("Os dados foram alterados no outro aparelho. Recarreguei a versão mais nova.", "error");
-        await reload();
-        return;
-      }
       setSync("error");
-      toast((e as Error).message || "Não foi possível salvar.", "error");
+      if (e instanceof HttpError && e.status === 409) {
+        toast("Não consegui salvar agora porque os dados estavam mudando. Tente de novo.", "error");
+      } else {
+        toast((e as Error).message || "Não foi possível salvar.", "error");
+      }
       await reload();
     },
     [reload, toast],
   );
 
-  const updateStatement = useCallback(
-    (m: MonthKey, fn: (s: StatementFile) => StatementFile) =>
+  /**
+   * Grava um arquivo aplicando `fn` na versão mais nova. Se outro aparelho (ou a sincronização
+   * com o banco) gravou antes, busca a versão nova, aplica a mesma edição em cima dela e tenta
+   * de novo, em vez de descartar o que a pessoa fez.
+   */
+  const save = useCallback(
+    <T,>(slot: Slot<T>, fn: (d: T) => T): Promise<boolean> =>
       enqueue(async () => {
-        const cur = stateRef.current?.statements[m];
-        if (!cur) return;
-        const next = fn(cur.data);
-        setState((s) => (s ? { ...s, statements: { ...s.statements, [m]: { ...cur, data: next } } } : s));
+        let base = slot.get(stateRef.current);
+        if (!base) return false;
         setSync("saving");
-        try {
-          const etag = stateRef.current?.statements[m]?.etag ?? cur.etag;
-          const r = await api<Versioned<StatementFile>>(`/api/statements/${m}`, {
-            method: "PUT",
-            body: JSON.stringify({ data: next, etag }),
-          });
-          setState((s) => (s ? { ...s, statements: { ...s.statements, [m]: r } } : s));
-          setSync("synced");
-        } catch (e) {
-          await handleError(e);
+        for (let attempt = 0; ; attempt++) {
+          const next = fn(base.data);
+          const etag = base.etag;
+          commit((s) => (s ? slot.set(s, { data: next, etag }) : s));
+          try {
+            const r = await api<Versioned<T>>(slot.url, { method: "PUT", body: JSON.stringify({ data: next, etag }) });
+            commit((s) => (s ? slot.set(s, r) : s));
+            setSync("synced");
+            return true;
+          } catch (e) {
+            if (e instanceof HttpError && e.status === 409 && attempt < MAX_MERGE_ATTEMPTS) {
+              try {
+                base = await api<Versioned<T>>(slot.url);
+                continue;
+              } catch (e2) {
+                await handleError(e2);
+                return false;
+              }
+            }
+            await handleError(e);
+            return false;
+          }
         }
       }),
-    [enqueue, handleError],
+    [enqueue, handleError, commit],
   );
 
-  const updateConfig = useCallback(
-    (fn: (c: HouseholdConfig) => HouseholdConfig) =>
-      enqueue(async () => {
-        const cur = stateRef.current?.config;
-        if (!cur) return false;
-        const next = fn(cur.data);
-        setState((s) => (s ? { ...s, config: { ...cur, data: next } } : s));
-        setSync("saving");
-        try {
-          const r = await api<Versioned<HouseholdConfig>>("/api/config", {
-            method: "PUT",
-            body: JSON.stringify({ data: next, etag: stateRef.current?.config.etag ?? cur.etag }),
-          });
-          setState((s) => (s ? { ...s, config: r } : s));
-          setSync("synced");
-          return true;
-        } catch (e) {
-          await handleError(e);
-          return false;
-        }
-      }),
-    [enqueue, handleError],
+  const updateStatement = useCallback(
+    async (m: MonthKey, fn: (s: StatementFile) => StatementFile) => {
+      await save(statementSlot(m), fn);
+    },
+    [save],
   );
+
+  const updateConfig = useCallback((fn: (c: HouseholdConfig) => HouseholdConfig) => save(configSlot, fn), [save]);
 
   const updateRecurring = useCallback(
-    (fn: (r: RecurringDebtsFile) => RecurringDebtsFile) =>
-      enqueue(async () => {
-        const cur = stateRef.current?.recurring;
-        if (!cur) return;
-        const next = fn(cur.data);
-        setState((s) => (s ? { ...s, recurring: { ...cur, data: next } } : s));
-        setSync("saving");
-        try {
-          const r = await api<Versioned<RecurringDebtsFile>>("/api/recurring", {
-            method: "PUT",
-            body: JSON.stringify({ data: next, etag: stateRef.current?.recurring.etag ?? cur.etag }),
-          });
-          setState((s) => (s ? { ...s, recurring: r } : s));
-          setSync("synced");
-        } catch (e) {
-          await handleError(e);
-        }
-      }),
-    [enqueue, handleError],
+    async (fn: (r: RecurringDebtsFile) => RecurringDebtsFile) => {
+      await save(recurringSlot, fn);
+    },
+    [save],
   );
 
   const closeMonth = useCallback(
     (m: MonthKey, reopen = false) =>
       enqueue(async () => {
-        const cur = stateRef.current?.statements[m];
-        if (!cur) return;
+        const slot = statementSlot(m);
+        let etag = slot.get(stateRef.current)?.etag;
+        if (etag === undefined) return;
         setSync("saving");
-        try {
-          const r = await api<Versioned<StatementFile>>(`/api/statements/${m}/close`, {
-            method: "POST",
-            body: JSON.stringify({ etag: cur.etag, reopen }),
-          });
-          setState((s) => (s ? { ...s, statements: { ...s.statements, [m]: r } } : s));
-          setSync("synced");
-          toast(reopen ? "Mês reaberto para edição." : "Mês fechado. Snapshot salvo.", "success");
-        } catch (e) {
-          await handleError(e);
+        for (let attempt = 0; ; attempt++) {
+          try {
+            const r = await api<Versioned<StatementFile>>(`/api/statements/${m}/close`, {
+              method: "POST",
+              body: JSON.stringify({ etag, reopen }),
+            });
+            commit((s) => (s ? slot.set(s, r) : s));
+            setSync("synced");
+            toast(reopen ? "Mês reaberto para edição." : "Mês fechado. Snapshot salvo.", "success");
+            return;
+          } catch (e) {
+            if (e instanceof HttpError && e.status === 409 && attempt < MAX_MERGE_ATTEMPTS) {
+              try {
+                const fresh = await api<Versioned<StatementFile>>(slot.url);
+                commit((s) => (s ? slot.set(s, fresh) : s));
+                etag = fresh.etag;
+                continue;
+              } catch (e2) {
+                await handleError(e2);
+                return;
+              }
+            }
+            await handleError(e);
+            return;
+          }
         }
       }),
-    [enqueue, handleError, toast],
+    [enqueue, handleError, toast, commit],
   );
+
+  /**
+   * Traz o que mudou em outro aparelho: pergunta ao servidor a versão de cada arquivo (uma
+   * consulta leve) e só baixa os que mudaram. Nunca no meio de uma gravação.
+   */
+  const refreshing = useRef(false);
+  const refreshChanged = useCallback(async () => {
+    const cur = stateRef.current;
+    if (!cur || refreshing.current || pending.current > 0 || document.visibilityState === "hidden") return;
+    refreshing.current = true;
+    try {
+      const { files } = await api<{ files: Record<string, string> }>("/api/versions");
+      const now = stateRef.current;
+      if (!now || pending.current > 0) return;
+      const slots: Slot<unknown>[] = [configSlot, recurringSlot, ...Object.keys(now.statements).map((m) => statementSlot(m))] as Slot<unknown>[];
+      const changed = slots.filter((slot) => (files[slot.file] ?? null) !== (slot.get(now)?.etag ?? null));
+      if (!changed.length) return;
+      const fresh = await Promise.all(changed.map((slot) => api<Versioned<unknown>>(slot.url)));
+      // Se alguém começou a editar enquanto baixávamos, deixa para a próxima rodada.
+      if (pending.current > 0) return;
+      commit((s) => {
+        if (!s) return s;
+        let out = s;
+        changed.forEach((slot, i) => {
+          if (slot.get(s)?.etag === slot.get(now)?.etag) out = slot.set(out, fresh[i]);
+        });
+        return out;
+      });
+    } catch {
+      /* sem conexão agora: tenta de novo na próxima */
+    } finally {
+      refreshing.current = false;
+    }
+  }, [commit]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshChanged();
+    };
+    const timer = setInterval(() => void refreshChanged(), REFRESH_EVERY_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("online", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("online", onVisible);
+    };
+  }, [refreshChanged]);
 
   const syncBank = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {

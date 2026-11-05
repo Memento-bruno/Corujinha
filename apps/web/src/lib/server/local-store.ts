@@ -55,6 +55,15 @@ export class LocalBlobStore implements BlobStore {
     }
   }
 
+  async versions(): Promise<Record<string, string>> {
+    const out: Record<string, string> = {};
+    for (const name of await this.list("")) {
+      const blob = await this.read(name);
+      if (blob) out[name] = blob.etag;
+    }
+    return out;
+  }
+
   async remove(name: string): Promise<void> {
     await fs.rm(this.file(name), { force: true });
   }

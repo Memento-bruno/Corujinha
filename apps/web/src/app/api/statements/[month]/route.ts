@@ -6,6 +6,18 @@ import { etagSchema, statementSchema } from "@/lib/server/schemas";
 import { requireViewer } from "@/lib/server/session";
 import type { StatementFile } from "@/lib/domain/types";
 
+export const dynamic = "force-dynamic";
+
+/** Versão mais nova da fatura do mês. */
+export async function GET(_req: Request, ctx: { params: Promise<{ month: string }> }) {
+  return handle(async () => {
+    await requireViewer();
+    const { month } = await ctx.params;
+    if (!isMonthKey(month)) throw new BadRequestError("Mês inválido");
+    return (await getDatabase()).getStatement(month);
+  });
+}
+
 export async function PUT(req: Request, ctx: { params: Promise<{ month: string }> }) {
   return handle(async () => {
     await requireViewer();
