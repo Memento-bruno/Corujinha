@@ -13,6 +13,17 @@ export function formatBRL(cents: Cents, compact = false): string {
   return (compact ? BRL_COMPACT : BRL).format(cents / 100);
 }
 
+/**
+ * Valor em 10³ com 2 casas decimais: R$ 2.536,83 => "R$ 2,54×10³".
+ * Abaixo de R$ 1.000 fica o valor normal (R$ 89,90).
+ */
+export function formatSci(cents: Cents): string {
+  const reais = cents / 100;
+  if (Math.abs(reais) < 1000) return formatBRL(cents);
+  const s = `R$ ${(Math.abs(reais) / 1000).toFixed(2).replace(".", ",")}×10³`;
+  return reais < 0 ? `-${s}` : s;
+}
+
 /** Formata um percentual já calculado (ex.: 12.345 => "12,3%"). */
 export function formatPct(value: number): string {
   if (!Number.isFinite(value)) return "0%";

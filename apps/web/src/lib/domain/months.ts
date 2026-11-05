@@ -47,3 +47,10 @@ export function monthShort(month: MonthKey): string {
   const s = SHORT.format(toDate(month)).replace(".", "");
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+const NAME = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "UTC" });
+
+/** Só o nome do mês, em minúsculas (ex.: "janeiro"). */
+export function monthName(month: MonthKey): string {
+  return NAME.format(toDate(month));
+}

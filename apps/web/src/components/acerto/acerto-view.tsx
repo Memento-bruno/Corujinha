@@ -8,7 +8,6 @@ import { useStore } from "@/lib/client/store";
 import { monthLabel } from "@/lib/domain/months";
 import type { SettlementResult, UserId } from "@/lib/domain/types";
 import { Avatar } from "../shell/avatar";
-import { MonthSwitcher } from "../shell/month-switcher";
 import { Button } from "../ui/button";
 import { Card, CardHeader } from "../ui/card";
 import { IconBox } from "../ui/icon-box";
@@ -32,7 +31,6 @@ export function AcertoView() {
     <div className="space-y-4">
       <div className="flex items-center justify-between pt-1">
         <h2 className="text-base font-semibold text-zinc-900">Encontro de contas</h2>
-        <MonthSwitcher />
       </div>
 
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>

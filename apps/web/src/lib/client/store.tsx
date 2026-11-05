@@ -53,6 +53,9 @@ interface Store {
   setMonth: (m: MonthKey) => void;
   privacy: boolean;
   setPrivacy: (v: boolean) => void;
+  /** Valores em 10³ com 2 casas decimais (ex.: R$ 2,54×10³). */
+  sci: boolean;
+  setSci: (v: boolean) => void;
   view: ViewFilter;
   setView: (v: ViewFilter) => void;
   reload: () => Promise<void>;
@@ -72,6 +75,7 @@ interface Store {
 const Ctx = createContext<Store | null>(null);
 
 const PRIVACY_KEY = "corujinha:privacy";
+const SCI_KEY = "corujinha:sci";
 
 export interface BankSyncSummary {
   added: number;
@@ -112,6 +116,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [sync, setSync] = useState<SyncStatus>("loading");
   const [month, setMonthState] = useState<MonthKey | null>(null);
   const [privacy, setPrivacyState] = useState(false);
+  const [sci, setSciState] = useState(false);
   const [view, setView] = useState<ViewFilter>("COUPLE");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [bankSyncing, setBankSyncing] = useState(false);
@@ -131,8 +136,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       setPrivacyState(localStorage.getItem(PRIVACY_KEY) === "1");
+      setSciState(localStorage.getItem(SCI_KEY) === "1");
     } catch {
       /* armazenamento indisponível */
+    }
+  }, []);
+
+  const setSci = useCallback((v: boolean) => {
+    setSciState(v);
+    try {
+      localStorage.setItem(SCI_KEY, v ? "1" : "0");
+    } catch {
+      /* ignore */
     }
   }, []);
 
@@ -345,6 +360,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setMonth,
       privacy,
       setPrivacy,
+      sci,
+      setSci,
       view,
       setView,
       reload,
@@ -358,7 +375,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toasts,
       toast,
     }),
-    [state, error, sync, month, setMonth, privacy, setPrivacy, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, syncBank, bankSyncing, firstSync, toasts, toast],
+    [state, error, sync, month, setMonth, privacy, setPrivacy, sci, setSci, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, syncBank, bankSyncing, firstSync, toasts, toast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

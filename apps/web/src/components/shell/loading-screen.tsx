@@ -97,6 +97,7 @@ const STARS = [
 export function LoadingScreen({
   ready,
   slow,
+  zoom = 1,
   message,
   onDone,
 }: {
@@ -106,6 +107,8 @@ export function LoadingScreen({
   slow?: boolean;
   message: string;
   onDone: () => void;
+  /** Zoom das telas encolhidas no celular: a tela de carregamento continua no tamanho do celular. */
+  zoom?: number;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const coins = useRef<Coin[]>([]);
@@ -314,7 +317,7 @@ export function LoadingScreen({
   return (
     <div
       className={
-        "fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-white px-4 text-zinc-900 transition-opacity duration-500 select-none dark:bg-black dark:text-zinc-100 " +
+        "fixed inset-0 z-[100] flex items-center justify-center bg-white text-zinc-900 transition-opacity duration-500 select-none dark:bg-black dark:text-zinc-100 " +
         (leaving ? "pointer-events-none opacity-0" : "opacity-100")
       }
       style={{ touchAction: "none" }}
@@ -324,6 +327,7 @@ export function LoadingScreen({
       aria-valuemax={100}
       aria-valuenow={pct}
     >
+      <div className="flex flex-col items-center gap-5 px-4" style={zoom !== 1 ? { zoom } : undefined}>
       <div className="flex flex-col items-center text-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-sol.svg" alt="Corujinha" width={88} height={88} className="mb-1 size-[88px] animate-[ls-bob_2.4s_ease-in-out_infinite] motion-reduce:animate-none" />
@@ -331,7 +335,10 @@ export function LoadingScreen({
         <div className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{message}</div>
       </div>
 
-      <div className="relative aspect-square w-[min(84vw,58dvh,380px)] rounded-full shadow-[0_20px_60px_-20px_rgba(0,0,0,0.35)] ring-1 ring-black/5 dark:shadow-[0_20px_70px_-20px_rgba(120,140,255,0.35)] dark:ring-white/10">
+      <div
+        style={{ width: `min(calc(84vw / ${zoom}), calc(58dvh / ${zoom}), 380px)` }}
+        className="relative aspect-square rounded-full shadow-[0_20px_60px_-20px_rgba(0,0,0,0.35)] ring-1 ring-black/5 dark:shadow-[0_20px_70px_-20px_rgba(120,140,255,0.35)] dark:ring-white/10"
+      >
         <svg
           ref={svgRef}
           viewBox={`0 0 ${SIZE} ${SIZE}`}
@@ -465,6 +472,7 @@ export function LoadingScreen({
             ? `${saved} moeda${saved === 1 ? "" : "s"} no cofrinho`
             : "Toque nos cofrinhos e jogue as moedas neles"}
         </div>
+      </div>
       </div>
     </div>
   );
