@@ -14,13 +14,13 @@ export function formatBRL(cents: Cents, compact = false): string {
 }
 
 /**
- * Valor em 10³ com 2 casas decimais: R$ 2.536,83 => "R$ 2,54×10³".
- * Abaixo de R$ 1.000 fica o valor normal (R$ 89,90).
+ * Valor em milhares com 2 casas, sem mostrar a potência (pedido do Bruno): R$ 4.260,00 => "R$ 4,26".
+ * O botão "10³" ligado no topo é o que indica que os valores estão em milhares.
+ * Todos os valores seguem a mesma escala, inclusive os pequenos: R$ 400,00 => "R$ 0,40".
  */
 export function formatSci(cents: Cents): string {
   const reais = cents / 100;
-  if (Math.abs(reais) < 1000) return formatBRL(cents);
-  const s = `R$ ${(Math.abs(reais) / 1000).toFixed(2).replace(".", ",")}×10³`;
+  const s = `R$ ${(Math.abs(reais) / 1000).toFixed(2).replace(".", ",")}`;
   return reais < 0 ? `-${s}` : s;
 }
 

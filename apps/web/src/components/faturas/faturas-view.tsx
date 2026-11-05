@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useDerived, useFmt } from "@/lib/client/derived";
 import { useStore } from "@/lib/client/store";
+import { useDragScroll } from "@/lib/client/use-drag-scroll";
 import { useReveal } from "@/lib/client/use-reveal";
 import { addMonths, monthName } from "@/lib/domain/months";
 import type { RecurringDebt, Transaction } from "@/lib/domain/types";
@@ -43,6 +44,7 @@ export function FaturasView() {
   const [sheet, setSheet] = useState<null | "importar" | "recorrentes" | "manual">(null);
   const [editingDebt, setEditingDebt] = useState<RecurringDebt | null>(null);
   const [ref, shown] = useReveal<HTMLElement>();
+  const [rowRef, drag] = useDragScroll<HTMLDivElement>();
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
@@ -171,7 +173,7 @@ export function FaturasView() {
         {cards.length > 0 && (
           <div className="mt-5">
             <p className="mb-2 text-sm text-zinc-600">Por cartão, do que mais gastou para o que menos gastou (toque para ver só um)</p>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div ref={rowRef} {...drag} className="no-scrollbar -mx-4 flex cursor-grab snap-x gap-3 overflow-x-auto px-4 pb-1 select-none active:cursor-grabbing sm:-mx-6 sm:px-6">
               {cards.map(({ c, total }, i) => {
                 const pct = (Math.max(0, total) / cardsSum) * 100;
                 const active = cardId === c.id;
@@ -181,7 +183,7 @@ export function FaturasView() {
                     onClick={() => pickCard(c.id)}
                     aria-pressed={active}
                     className={cn(
-                      "min-w-0 rounded-2xl border p-2 text-left transition-[opacity,transform,border-color] duration-500 ease-out motion-reduce:transition-none",
+                      "w-[200px] shrink-0 snap-start rounded-2xl border p-2 text-left transition-[opacity,transform,border-color] duration-500 ease-out motion-reduce:transition-none",
                       active ? "border-zinc-900 ring-1 ring-zinc-900" : "border-[#ebebef] hover:border-zinc-300",
                       cardId && !active && "opacity-60",
                     )}

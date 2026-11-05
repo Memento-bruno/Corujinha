@@ -1,10 +1,10 @@
 "use client";
 
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowUp, Eye, EyeOff } from "lucide-react";
 import { useStore } from "@/lib/client/store";
 import { cn } from "@/lib/utils";
 
-/** Como mostrar os valores, só com ícones: completo, em 10³ com 2 casas, ou escondido (só porcentagens). */
+/** Como mostrar os valores, só com ícones: completo, em milhares com 2 casas (seta pra cima), ou escondido (só porcentagens). */
 export function ValueMode() {
   const { privacy, setPrivacy, sci, setSci } = useStore();
   const mode = privacy ? "hide" : sci ? "sci" : "full";
@@ -15,10 +15,8 @@ export function ValueMode() {
       <button type="button" aria-pressed={mode === "full"} aria-label="Valor completo (R$ 2.536)" title="Valor completo (R$ 2.536)" className={btn(mode === "full")} onClick={() => { setPrivacy(false); setSci(false); }}>
         <Eye className="size-[18px]" />
       </button>
-      <button type="button" aria-pressed={mode === "sci"} aria-label="Valores em 10³ (R$ 2,54×10³)" title="Valores em 10³ (R$ 2,54×10³)" className={btn(mode === "sci")} onClick={() => { setPrivacy(false); setSci(true); }}>
-        <span className="text-[13px] leading-none font-extrabold" aria-hidden>
-          10<sup className="text-[9px]">3</sup>
-        </span>
+      <button type="button" aria-pressed={mode === "sci"} aria-label="Valores em milhares (R$ 4.260 vira R$ 4,26)" title="Valores em milhares (R$ 4.260 vira R$ 4,26)" className={btn(mode === "sci")} onClick={() => { setPrivacy(false); setSci(true); }}>
+        <ArrowUp className="size-[18px]" strokeWidth={2.5} />
       </button>
       <button type="button" aria-pressed={mode === "hide"} aria-label="Esconder valores, mostrar só porcentagens" title="Esconder valores (só %)" className={btn(mode === "hide")} onClick={() => setPrivacy(true)}>
         <EyeOff className="size-[18px]" />

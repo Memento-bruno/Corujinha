@@ -78,3 +78,9 @@ body {
     transform: translateY(-5px);
   }
 }
+
+/* iPhone: não aumentar letras sozinho na tela encolhida (fazia o layout pular). */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}

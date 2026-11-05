@@ -2,7 +2,7 @@
 
 import { Loader2, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useDesktopViewport } from "@/lib/client/use-desktop-viewport";
+import { useNavZoom } from "@/lib/client/use-desktop-viewport";
 import { AppProvider, useStore } from "@/lib/client/store";
 import { BottomNav } from "./bottom-nav";
 import { Header } from "./header";
@@ -64,8 +64,8 @@ function Splash({ zoom }: { zoom: number }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  // Início no celular = tela do computador encolhida; o menu de baixo fica no tamanho normal.
-  const navZoom = useDesktopViewport(true);
+  // No celular a tela do computador vem encolhida (viewport 920); o menu de baixo fica no tamanho normal.
+  const navZoom = useNavZoom();
   useEffect(() => {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
