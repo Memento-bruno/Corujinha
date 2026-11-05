@@ -161,7 +161,7 @@ export function FaturasView() {
                   style={{ width: shown ? `${x.pct}%` : "0%", background: x.bg, transitionDelay: `${i * 120}ms` }}
                   title={`${x.label} ${Math.round(x.pct)}%`}
                 >
-                  {x.pct >= 9 ? `${x.label} ${Math.round(x.pct)}%` : x.pct >= 4 ? `${Math.round(x.pct)}%` : ""}
+                  {x.pct >= 16 ? `${x.label} ${Math.round(x.pct)}%` : x.pct >= 4 ? `${Math.round(x.pct)}%` : ""}
                 </div>
               ))}
             </div>
@@ -187,13 +187,13 @@ export function FaturasView() {
                     )}
                     style={{ opacity: shown ? undefined : 0, transform: shown ? "none" : "translateY(12px)", transitionDelay: `${i * 90}ms` }}
                   >
-                    <div className="relative">
-                      <CreditCardVisual compact card={c} ownerName={first(c.owner)} />
-                      <span className="absolute top-2.5 left-1/2 -translate-x-1/2 rounded-full bg-zinc-900 px-2 py-0.5 text-[11px] font-extrabold text-white">{i + 1}º</span>
-                    </div>
-                    <div className="mt-2 flex items-baseline justify-between gap-2 px-1">
-                      <span className="tabular truncate text-sm font-bold">{fmt.money(total)}</span>
-                      <span className="tabular text-xs text-zinc-500">{Math.round(pct)}%</span>
+                    <CreditCardVisual compact card={c} ownerName={first(c.owner)} />
+                    <div className="mt-2 flex items-center justify-between gap-2 px-1">
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="shrink-0 rounded-full bg-zinc-900 px-1.5 py-0.5 text-[10px] font-extrabold text-white">{i + 1}º</span>
+                        <span className="tabular truncate text-sm font-bold">{fmt.money(total)}</span>
+                      </span>
+                      <span className="tabular hidden text-xs text-zinc-500 sm:inline">{Math.round(pct)}%</span>
                     </div>
                     <div className="mx-1 mt-1.5 mb-1 h-1.5 overflow-hidden rounded-full bg-zinc-100">
                       <div
@@ -209,8 +209,8 @@ export function FaturasView() {
         )}
       </section>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <section className={panel}>
+      <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_360px]">
+        <section className={cn(panel, "min-w-0")}>
           <Purchases txs={txs} closed={closed} cardName={cardId ? d.config.cards.find((c) => c.id === cardId)?.nickname : undefined} onClearCard={() => setCardId(null)} />
         </section>
 
@@ -272,7 +272,7 @@ export function FaturasView() {
             </div>
             <div className="mt-3 space-y-2">
               <button className={cn(pillBtn, "h-11 w-full")} onClick={() => setSheet("importar")}>
-                Enviar arquivo da fatura (PDF, OFX ou CSV)
+                Enviar arquivo da fatura
               </button>
               <button className={cn(pillBtn, "h-11 w-full")} disabled={closed} onClick={() => setSheet("manual")}>
                 <Plus className="size-4" /> Compra feita à mão

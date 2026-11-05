@@ -1,7 +1,6 @@
 "use client";
 
 import { Loader2, ShieldCheck } from "lucide-react";
-import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { useDesktopViewport } from "@/lib/client/use-desktop-viewport";
 import { AppProvider, useStore } from "@/lib/client/store";
@@ -49,7 +48,7 @@ function Body({ children }: { children: React.ReactNode }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   // Início no celular = tela do computador encolhida; o menu de baixo fica no tamanho normal.
-  const navZoom = useDesktopViewport(usePathname() === "/");
+  const navZoom = useDesktopViewport(true);
   useEffect(() => {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);

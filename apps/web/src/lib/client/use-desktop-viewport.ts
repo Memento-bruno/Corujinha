@@ -7,7 +7,7 @@ export const DESKTOP_WIDTH = 920;
 const DEFAULT_VIEWPORT = "width=device-width, initial-scale=1";
 
 /**
- * No celular, o Início mostra a mesma arrumação do computador, só que encolhida (pedido do Bruno):
+ * No celular, todas as telas mostram a mesma arrumação do computador, só que encolhida (pedido do Bruno):
  * o navegador desenha a página com 920px de largura e encolhe para caber na tela (dá para ampliar com os dedos).
  * Devolve o zoom para o menu de baixo continuar no tamanho normal de toque.
  */
