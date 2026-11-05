@@ -44,6 +44,7 @@ export interface PluggyTransaction {
 export interface PluggyBill {
   id: string;
   dueDate: string;
+  billClosingDate?: string | null;
   totalAmount?: number | null;
 }
 
@@ -196,8 +197,23 @@ export function mapCardTransactions(
   const cardFor = typeof cardOrResolver === "function" ? cardOrResolver : () => cardOrResolver;
   const sign = expenseSign(txs);
   const billMonth = new Map(bills.map((b) => [b.id, monthOfIso(b.dueDate)]));
+  const closingByMonth = new Map(bills.map((b) => [monthOfIso(b.dueDate), (b.billClosingDate ?? "").slice(0, 10)]));
   const lastBill = [...billMonth.values()].sort().at(-1);
   const openMonth = lastBill ? addMonths(lastBill, 1) : undefined;
+  /**
+   * Mês de uma compra sem fatura vinculada, pela previsão do banco:
+   * - previsão depois da fatura aberta: parcela futura que o banco já informa (Nubank) → mês previsto;
+   * - previsão numa fatura fechada, com data até o fechamento dela: já está naquela fatura → ignora;
+   * - o resto é da fatura aberta.
+   */
+  const unlinkedMonth = (t: PluggyTransaction): MonthKey | null | undefined => {
+    const forecast = t.creditCardMetadata?.billForecastDate?.slice(0, 7);
+    if (!openMonth || !forecast || !/^\d{4}-\d{2}$/.test(forecast)) return undefined;
+    if (forecast > openMonth) return forecast;
+    const closing = closingByMonth.get(forecast);
+    if (forecast <= lastBill! && closing && t.date.slice(0, 10) <= closing) return null;
+    return openMonth;
+  };
   const raw: { tx: Transaction; billMonth?: MonthKey }[] = [];
   for (const t of txs) {
     const rawDesc = t.merchant?.name || t.description || t.descriptionRaw || "";
@@ -209,13 +225,16 @@ export function mapCardTransactions(
     const description = cleanDescription(rawDesc).slice(0, 140) || "Compra";
     const merchantKey = merchantKeyOf(description);
     const category = guessCategory(description, merchantKey);
+    const linked = (meta?.billId && billMonth.get(meta.billId)) || undefined;
+    const unlinked = linked ? undefined : unlinkedMonth(t);
+    if (unlinked === null) continue;
     const card = cardFor(t);
     const installment =
       meta?.installmentNumber && meta?.totalInstallments && meta.totalInstallments > 1
         ? { current: meta.installmentNumber, total: meta.totalInstallments }
         : undefined;
     raw.push({
-      billMonth: (meta?.billId && billMonth.get(meta.billId)) || undefined,
+      billMonth: linked ?? unlinked,
       tx: {
         id: `plg-${t.id}`,
         externalId: `pluggy:${t.id}`,
@@ -251,7 +270,11 @@ export function mapCardTransactions(
     const k = [d.tx.cardId, d.tx.merchantKey, i.total, addMonths(d.month, -i.current)].join("|");
     groups.set(k, [...(groups.get(k) ?? []), d]);
   }
-  const latest = openMonth ?? placed.map((d) => d.month).sort().at(-1);
+  // Alguns bancos (Santander) já lançam na fatura aberta as parcelas do próximo ciclo; outros (XP) só
+  // lançam no fechamento. Nesse caso, as parcelas que faltam são previstas a partir da última fatura fechada.
+  const inOpen = placed.filter((d) => d.month === openMonth);
+  const openWithoutInstallments = inOpen.length > 0 && !inOpen.some((d) => d.tx.installment);
+  const latest = openWithoutInstallments && lastBill ? lastBill : (openMonth ?? placed.map((d) => d.month).sort().at(-1));
   for (const list of groups.values()) {
     const top = Math.max(...list.map((d) => d.tx.installment!.current));
     // Cada compra com a parcela mais recente na fatura aberta projeta as que faltam.
@@ -267,6 +290,32 @@ export function mapCardTransactions(
         });
       }
     }
+  }
+
+  // Faturas fechadas: o banco às vezes cobra coisas que não vêm como compra (parcela de fatura
+  // parcelada, tarifas). Um lançamento de ajuste faz o total do mês bater com o da fatura.
+  for (const b of bills) {
+    if (typeof b.totalAmount !== "number") continue;
+    const m = monthOfIso(b.dueDate);
+    const sum = (out.get(m) ?? []).reduce((acc, t) => acc + t.amount, 0);
+    const diff = Math.round(b.totalAmount * 100) - sum;
+    if (diff === 0 || !out.has(m)) continue;
+    // Sem dados de compra, o resolvedor devolve o cartão principal da conta.
+    const card = cardFor({ id: `ajuste-${b.id}`, description: "", amount: 0, date: b.dueDate });
+    push(m, {
+      id: `plg-ajuste-${b.id}`,
+      externalId: `pluggy:ajuste:${b.id}`,
+      date: (b.billClosingDate ?? b.dueDate).slice(0, 10),
+      description: "Outros lançamentos da fatura",
+      merchantKey: "ajuste-fatura",
+      amount: diff,
+      cardId: card.id,
+      paidBy: card.owner,
+      category: "outros",
+      tags: [],
+      split: { type: "SHARED_DEFAULT" },
+      source: "pluggy",
+    });
   }
   return out;
 }
