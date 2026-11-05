@@ -123,7 +123,7 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
       ) : (
         <>
           <p className="mb-3 text-xs text-zinc-500">
-            Última sincronização: <b className="text-zinc-700">{formatWhen(config.pluggyLastSyncAt)}</b>. O app também sincroniza sozinho ao abrir, a cada 6h. Compras que vocês já editaram não são alteradas, e meses fechados ficam como estão.
+            Última sincronização: <b className="text-zinc-700">{formatWhen(config.pluggyLastSyncAt)}</b>. O app busca a fatura sozinho só na primeira vez; depois, toque em “Sincronizar agora” quando quiser trazer compras novas. Compras que vocês já editaram não são alteradas, e meses fechados ficam como estão.
           </p>
           {items.length > 0 && (
             <ul className="mb-3 space-y-2">
