@@ -60,7 +60,8 @@ interface Store {
   setView: (v: ViewFilter) => void;
   reload: () => Promise<void>;
   updateStatement: (month: MonthKey, fn: (s: StatementFile) => StatementFile) => Promise<void>;
-  updateConfig: (fn: (c: HouseholdConfig) => HouseholdConfig) => Promise<void>;
+  /** Resolve true se salvou; false se deu erro (o erro já aparece num aviso). */
+  updateConfig: (fn: (c: HouseholdConfig) => HouseholdConfig) => Promise<boolean>;
   updateRecurring: (fn: (r: RecurringDebtsFile) => RecurringDebtsFile) => Promise<void>;
   closeMonth: (month: MonthKey, reopen?: boolean) => Promise<void>;
   /** Busca as faturas no Open Finance (Meu Pluggy). `silent` não mostra aviso quando nada mudou. */
@@ -104,7 +105,11 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
     cache: "no-store",
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new HttpError(res.status, body.error ?? `Erro ${res.status}`);
+  if (!res.ok) {
+    // Em "Dados inválidos", diz qual campo foi recusado, para dar para descobrir a causa.
+    const field = Array.isArray(body.issues) ? body.issues[0]?.path?.filter((p: unknown) => typeof p === "string").join(".") : "";
+    throw new HttpError(res.status, (body.error ?? `Erro ${res.status}`) + (field ? ` (${field})` : ""));
+  }
   return body as T;
 }
 
@@ -251,7 +256,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (fn: (c: HouseholdConfig) => HouseholdConfig) =>
       enqueue(async () => {
         const cur = stateRef.current?.config;
-        if (!cur) return;
+        if (!cur) return false;
         const next = fn(cur.data);
         setState((s) => (s ? { ...s, config: { ...cur, data: next } } : s));
         setSync("saving");
@@ -262,8 +267,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           });
           setState((s) => (s ? { ...s, config: r } : s));
           setSync("synced");
+          return true;
         } catch (e) {
           await handleError(e);
+          return false;
         }
       }),
     [enqueue, handleError],

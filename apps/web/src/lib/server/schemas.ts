@@ -87,7 +87,8 @@ export const configSchema = z.object({
         theme: z.number().int().min(0).max(3),
       }),
     )
-    .max(20),
+    // Folga para cartões virtuais e adicionais criados pela sincronização do banco.
+    .max(100),
   defaultSplitPercentA: z.number().min(0).max(100),
   monthlyGoal: cents.min(0),
   incomes: z.partialRecord(userId, cents.min(0)).optional(),
