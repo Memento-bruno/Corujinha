@@ -33,10 +33,9 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
     const id = raw.trim().toLowerCase();
     if (!ITEM_ID.test(id)) return false;
     if (items.some((i) => i.itemId === id)) return false;
-    await updateConfig((c) =>
+    return updateConfig((c) =>
       (c.pluggyItems ?? []).some((i) => i.itemId === id) ? c : { ...c, pluggyItems: [...(c.pluggyItems ?? []), { itemId: id, owner }] },
     );
-    return true;
   };
 
   const add = async () => {
@@ -62,7 +61,8 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
               );
               return;
             }
-            await saveItem(id);
+            // Se não salvou, o erro já apareceu: não diz que conectou.
+            if (!(await saveItem(id))) return;
           }
           toast(existing ? "Conexão renovada. Buscando as compras…" : "Banco conectado. Buscando as compras…", "success");
           await syncBank();
