@@ -84,14 +84,32 @@ export interface HouseholdConfig {
   defaultSplitPercentA: number;
   /** Meta mensal de gastos do casal (centavos). Base do medidor de saúde. */
   monthlyGoal: Cents;
+  /**
+   * Salário líquido de cada um (centavos). Só serve para calcular quanto da renda os gastos usam:
+   * a interface nunca mostra esses valores, só porcentagens.
+   */
+  incomes?: Partial<Record<UserId, Cents>>;
   /** Tetos de gasto por setor (centavos). */
   sectorBudgets: Partial<Record<CategoryId, Cents>>;
   savingsRules: SavingsRulesConfig;
   /** Estabelecimentos marcados pelo casal como assinatura (merchantKey). */
   subscriptionMerchants: string[];
+  /**
+   * Memória de fornecedores (por merchantKey): setor e divisão que o casal escolheu da última vez.
+   * Compra nova do mesmo fornecedor já chega com eles.
+   */
+  merchantRules?: Record<string, MerchantRule>;
   /** Conexões Open Finance (Meu Pluggy). O itemId sozinho não dá acesso a nada sem o client secret. */
   pluggyItems?: PluggyItemLink[];
   pluggyLastSyncAt?: string;
+  updatedAt: string;
+}
+
+export interface MerchantRule {
+  /** Nome para mostrar (descrição da última compra editada). */
+  name: string;
+  category?: CategoryId;
+  split?: Split;
   updatedAt: string;
 }
 

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { addMonths, monthRange } from "../domain/months";
-import { formatBRL, formatPct, pctOf } from "../domain/money";
+import { formatBRL, formatPct, formatSci, pctOf } from "../domain/money";
 import type { Cents, MonthKey, Transaction, UserId } from "../domain/types";
 import {
   deltaPct,
@@ -17,6 +17,14 @@ import {
 import { RuleBasedSavingsEngine } from "../engines/savings";
 import { withPredicted } from "../engines/recurring";
 import { recurringToExpenses, settleMonth, splitAmount } from "../engines/settlement";
+import {
+  billsPaidRatio,
+  cardTxsFor,
+  financialHealth,
+  incomeUsage,
+  monthComposition,
+  monthSpend,
+} from "../engines/overview";
 import { useStore } from "./store";
 
 /**
@@ -25,30 +33,41 @@ import { useStore } from "./store";
  */
 export interface Fmt {
   privacy: boolean;
+  sci: boolean;
   money: (cents: Cents, base?: Cents, opts?: { compact?: boolean; signed?: boolean }) => string;
   pct: (value: number) => string;
+  /** Rótulo de gráfico: só o número, sem "R$" nem "×10³" (ex.: "2.536" ou "2,54"). */
+  num: (cents: Cents, base?: Cents) => string;
   baseLabel: string;
 }
 
+const NUM = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+
 export function useFmt(defaultBase?: Cents): Fmt {
-  const { privacy } = useStore();
+  const { privacy, sci } = useStore();
   const derived = useDerivedOptional();
   const base = defaultBase ?? derived?.total ?? 0;
   return useMemo(
     () => ({
       privacy,
+      sci,
       baseLabel: "da fatura",
       pct: formatPct,
+      num: (cents, b) => {
+        if (privacy) return formatPct(pctOf(cents, b ?? base));
+        const reais = cents / 100;
+        return sci ? (reais / 1000).toFixed(2).replace(".", ",") : NUM.format(Math.round(reais));
+      },
       money: (cents, b, opts) => {
         if (privacy) {
           const v = pctOf(cents, b ?? base);
           return `${opts?.signed && v > 0 ? "+" : ""}${formatPct(v)}`;
         }
-        const s = formatBRL(cents, opts?.compact);
+        const s = sci ? formatSci(cents) : formatBRL(cents, opts?.compact);
         return opts?.signed && cents > 0 ? `+${s}` : s;
       },
     }),
-    [privacy, base],
+    [privacy, sci, base],
   );
 }
 
@@ -110,6 +129,31 @@ function useDerivedOptional() {
     });
 
     const installments = projectInstallments(txs, month, 12);
+
+    // --- Tela Início: cartão + contas fora do cartão, histórico e previsão ---
+    const openMonth = state.openMonth ?? month;
+    const cardOf = (m: MonthKey) => cardTxsFor(byMonth, debts, m, openMonth);
+    const spendOf = (m: MonthKey) => monthSpend(cardOf(m), debts, m, openMonth, cfg.monthlyGoal);
+    const spend = spendOf(month);
+    /** Faixa de meses do topo: fixa em volta da fatura em aberto. */
+    const strip = monthRange(addMonths(openMonth, 5), 12).map(spendOf);
+    /** Linha de evolução: 4 meses antes, o mês e 4 depois. */
+    const timeline = monthRange(addMonths(month, 4), 9).map(spendOf);
+    const composition = timeline.map((s) => ({ ...s, parts: monthComposition(cardOf(s.month), debts, s.month) }));
+    const income = incomeUsage(settlement.grossTotal, settlement.fairShare, cfg.incomes);
+    const healthOf = (m: MonthKey, sp: number, futureInst: number) =>
+      financialHealth({
+        spent: sp,
+        goal: cfg.monthlyGoal,
+        income: income.totalIncome,
+        futureInstallments: futureInst,
+        paidRatio: billsPaidRatio(statements[addMonths(m, -1)]?.data.bankBills),
+      });
+    const nextInstallments = projectInstallments(allTxs, month, 1)[0]?.total ?? 0;
+    const prevSpend = spendOf(prevMonth);
+    const prevInstallments = projectInstallments(byMonth[prevMonth] ?? [], prevMonth, 1)[0]?.total ?? 0;
+    const finHealth = healthOf(month, spend.total, nextInstallments);
+    const prevFinHealth = prevSpend.status === "empty" ? null : healthOf(prevMonth, prevSpend.total, prevInstallments);
     const engine = new RuleBasedSavingsEngine({ month, byMonth, config: cfg });
     const recommendations = engine.analyze();
     const candidates = engine.simulatorCandidates();
@@ -144,6 +188,14 @@ function useDerivedOptional() {
       suggestedSubscriptions,
       subscriptions,
       snapshot: statements[month]?.data.snapshot,
+      openMonth,
+      spend,
+      strip,
+      timeline,
+      composition,
+      income,
+      finHealth,
+      prevFinHealth,
       byMonth,
     };
   }, [state, view]);

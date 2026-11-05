@@ -1,6 +1,7 @@
 import "server-only";
 import { addMonths, monthOf } from "../domain/months";
 import type { BankBill, HouseholdConfig, MonthKey, Transaction } from "../domain/types";
+import { applyMerchantRule } from "../engines/merchants";
 import { applyCardRecurring } from "../engines/recurring";
 import { ConflictError } from "../server/blob-store";
 import type { DriveDatabaseService } from "../server/database";
@@ -113,7 +114,7 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   const isOrphan = (t: Transaction) =>
     allClean && t.source === "pluggy" && (t.pluggyItemId ? !itemIds.has(t.pluggyItemId) : !syncedCardIds.has(t.cardId));
   for (const month of [...months].sort()) {
-    const incoming = (byMonth.get(month) ?? []).map((t) => applyCardRecurring(debts, t));
+    const incoming = (byMonth.get(month) ?? []).map((t) => applyCardRecurring(debts, applyMerchantRule(cfg.merchantRules, t)));
     for (let attempt = 0; attempt < 3; attempt++) {
       const cur = await db.getStatement(month);
       if (cur.data.snapshot) {

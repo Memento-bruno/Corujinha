@@ -1,6 +1,5 @@
-import { AjustesView } from "@/components/ajustes/ajustes-view";
-import { signOutAction } from "./actions";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <AjustesView signOutAction={signOutAction} />;
+  redirect("/configuracoes");
 }

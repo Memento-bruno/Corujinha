@@ -32,6 +32,7 @@ export async function POST(req: Request) {
         seen.add(key);
         const merchantKey = merchantKeyOf(row.description);
         const category = guessCategory(row.description, merchantKey);
+        const rule = config.merchantRules?.[merchantKey];
         added.push({
           id: `imp-${randomUUID()}`,
           date: row.date,
@@ -40,9 +41,9 @@ export async function POST(req: Request) {
           amount: row.amount,
           cardId: card.id,
           paidBy: card.owner,
-          category,
-          tags: category === "assinaturas" || config.subscriptionMerchants.includes(merchantKey) ? ["Assinatura"] : [],
-          split: { type: "SHARED_DEFAULT" },
+          category: rule?.category ?? category,
+          tags: (rule?.category ?? category) === "assinaturas" || config.subscriptionMerchants.includes(merchantKey) ? ["Assinatura"] : [],
+          split: rule?.split ?? { type: "SHARED_DEFAULT" },
           installment: row.installment,
           source: body.source,
         });

@@ -71,7 +71,7 @@ export function ImportTab() {
         <CardHeader
           icon={<IconBox><Landmark /></IconBox>}
           title="Direto do banco"
-          subtitle={bankReady ? "Compras novas via Open Finance" : "Conecte o Meu Pluggy em Ajustes"}
+          subtitle={bankReady ? "Compras novas via Open Finance" : "Conecte o Meu Pluggy em Configurações"}
           action={
             bankReady ? (
               <Button size="sm" disabled={bankSyncing} onClick={() => void syncBank()}>
@@ -79,7 +79,7 @@ export function ImportTab() {
               </Button>
             ) : (
               <Button size="sm" variant="outline" asChild>
-                <Link href="/ajustes#open-finance">Configurar</Link>
+                <Link href="/configuracoes#open-finance">Configurar</Link>
               </Button>
             )
           }

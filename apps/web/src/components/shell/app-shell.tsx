@@ -2,6 +2,7 @@
 
 import { Loader2, ShieldCheck } from "lucide-react";
 import { useEffect } from "react";
+import { useDesktopViewport } from "@/lib/client/use-desktop-viewport";
 import { AppProvider, useStore } from "@/lib/client/store";
 import { BottomNav } from "./bottom-nav";
 import { Header } from "./header";
@@ -46,6 +47,8 @@ function Body({ children }: { children: React.ReactNode }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  // Início no celular = tela do computador encolhida; o menu de baixo fica no tamanho normal.
+  const navZoom = useDesktopViewport(true);
   useEffect(() => {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
@@ -54,10 +57,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <AppProvider>
       <Toasts />
-      <div className="mx-auto w-full max-w-6xl px-4 pb-32 sm:px-6">
+      <div className="mx-auto w-full max-w-6xl px-3 pb-32 sm:px-6">
         <Body>{children}</Body>
       </div>
-      <BottomNav />
+      <BottomNav zoom={navZoom} />
     </AppProvider>
   );
 }

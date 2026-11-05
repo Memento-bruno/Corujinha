@@ -90,12 +90,20 @@ export const configSchema = z.object({
     .max(20),
   defaultSplitPercentA: z.number().min(0).max(100),
   monthlyGoal: cents.min(0),
+  incomes: z.partialRecord(userId, cents.min(0)).optional(),
   sectorBudgets: z.partialRecord(category, cents.min(0)),
   savingsRules: z.object({
     movingAverageThresholdPct: z.number().min(0).max(500),
     highFrequencyMinOccurrences: z.number().int().min(2).max(100),
   }),
   subscriptionMerchants: z.array(z.string().max(80)).max(200),
+  merchantRules: z
+    .record(
+      z.string().min(1).max(80),
+      z.object({ name: shortText, category: category.optional(), split: splitSchema.optional(), updatedAt: z.string().max(40) }),
+    )
+    .refine((r) => Object.keys(r).length <= 3000, { message: "Fornecedores demais." })
+    .optional(),
   pluggyItems: z
     .array(z.object({ itemId: z.string().regex(/^[0-9a-f-]{36}$/i, "itemId inválido"), owner: userId }))
     .max(10)

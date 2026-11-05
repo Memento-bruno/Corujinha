@@ -1,33 +1,28 @@
 "use client";
 
-import { MonthSwitcher } from "../shell/month-switcher";
-import { CardsSection } from "./cards-section";
-import { HealthGauge } from "./health-gauge";
-import { InstallmentsChart } from "./installments-chart";
-import { KpiGrid } from "./kpi-grid";
-import { RecurringList } from "./recurring-list";
-import { SectorBreakdown } from "./sector-breakdown";
-import { SpendingChart } from "./spending-chart";
+import { BillsCard } from "./bills-card";
+import { CardsStrip } from "./cards-strip";
+import { CategoriesCard } from "./categories-card";
+import { CompositionChart } from "./composition-chart";
+import { DueDates } from "./due-dates";
+import { EvolutionChart } from "./evolution-chart";
+import { HealthCard } from "./health-card";
+import { SpendHero } from "./spend-hero";
 
 export function HomeView() {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between pt-1">
-        <h2 className="text-base font-semibold text-zinc-900">Visão geral</h2>
-        <MonthSwitcher />
+    <div className="flex flex-col gap-5">
+      <DueDates />
+      <SpendHero />
+      <div className="flex flex-wrap gap-5">
+        <EvolutionChart />
+        <HealthCard />
       </div>
-      <KpiGrid />
-      <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
-        <div className="min-w-0 space-y-4">
-          <CardsSection />
-          <SpendingChart />
-          <InstallmentsChart />
-        </div>
-        <div className="min-w-0 space-y-4">
-          <HealthGauge />
-          <SectorBreakdown />
-          <RecurringList />
-        </div>
+      <CardsStrip />
+      <CompositionChart />
+      <div className="flex flex-wrap gap-5">
+        <CategoriesCard />
+        <BillsCard />
       </div>
     </div>
   );
