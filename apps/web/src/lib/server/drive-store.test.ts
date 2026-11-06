@@ -108,6 +108,21 @@ describe("DriveBlobStore (vários servidores ao mesmo tempo)", () => {
     expect(now?.content).toBe("do outro");
   });
 
+  it("histórico do Drive atrasado (toques seguidos): não desfaz a gravação anterior", async () => {
+    const fake = fakeDrive();
+    const store = new DriveBlobStore("pasta", fake.drive);
+    await store.write("x.json", "zero", null);
+    const um = await store.write("x.json", "um", (await store.read("x.json"))!.etag);
+    // O histórico ainda não mostra a versão "um" quando a próxima gravação confere.
+    fake.hooks.beforeUpdate = async () => {
+      const f = fake.files[0];
+      f.revisions = f.revisions.filter((r) => r.content !== "um");
+    };
+    await store.write("x.json", "dois", um.etag);
+    fake.hooks.beforeUpdate = undefined;
+    expect((await new DriveBlobStore("pasta", fake.drive).read("x.json"))?.content).toBe("dois");
+  });
+
   it("dois servidores criando o mesmo arquivo: fica o mais antigo", async () => {
     const fake = fakeDrive();
     const store = new DriveBlobStore("pasta", fake.drive);
