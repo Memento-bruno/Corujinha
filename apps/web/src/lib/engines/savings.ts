@@ -406,9 +406,12 @@ export class RuleBasedSavingsEngine {
     const out: SimulatorCandidate[] = [];
     const groups = new Map<string, Transaction[]>();
     for (const t of this.current) {
-      if (t.amount <= 0 || t.installment) continue;
+      if (t.amount <= 0) continue;
+      const marked = isSubscription(t, this.input.config);
+      // Parcela só entra se o casal marcou como assinatura (ex.: plano anual parcelado).
+      if (t.installment && !marked) continue;
       const sub =
-        isSubscription(t, this.input.config) ||
+        marked ||
         Boolean(t.predictedFrom) ||
         (Boolean(t.merchantKey) && t.merchantKey !== "desconhecido" && recurringMerchants.has(t.merchantKey));
       const variable = !CATEGORIES[t.category]?.essential;

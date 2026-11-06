@@ -99,6 +99,17 @@ describe("simulador: assinaturas e recorrentes", () => {
     expect(c.some((x) => x.id.endsWith("mercado x"))).toBe(false);
   });
 
+  it("parcela marcada como assinatura entra; parcela comum não", () => {
+    const m = {
+      "2026-10": [
+        tx("x", "2026-10-02", "plano anual", 5000, { installment: { current: 2, total: 12 }, tags: ["Assinatura"] }),
+        tx("y", "2026-10-03", "geladeira", 40000, { installment: { current: 2, total: 10 }, category: "compras" }),
+      ],
+    };
+    const ids = new RuleBasedSavingsEngine({ month: "2026-10", byMonth: m, config }).simulatorCandidates().map((c) => c.id);
+    expect(ids).toEqual(["s|plano anual"]);
+  });
+
   it("muitas compras no mês na mesma loja ficam em gastos variáveis", () => {
     const many = { ...hist, "2026-10": [1, 2, 3, 4].map((i) => tx(`i${i}`, "2026-10-1" + i, "ifood", 3000, { category: "delivery" })), "2026-09": [tx("z", "2026-09-01", "ifood", 3000)] };
     expect(repeatedMerchants(many, "2026-10").has("ifood")).toBe(false);
