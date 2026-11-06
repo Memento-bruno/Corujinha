@@ -393,15 +393,27 @@ export class RuleBasedSavingsEngine {
   }
 
   /** Regra 7: itens para o simulador "E se cortarmos?" */
-  simulatorCandidates(): SimulatorCandidate[] {
+  /**
+   * Itens do simulador "E se cortarmos?".
+   *
+   * Vão para "Assinaturas e recorrentes" (mesmo se o setor for essencial):
+   *  - compras marcadas como assinatura (marca, setor Assinaturas ou loja salva);
+   *  - compras com "Repete todo mês" ligado (e as previstas por ele);
+   *  - lojas que já apareceram em outro mês recente (`recurringMerchants`).
+   * O resto que não é parcela e não é de setor essencial vai para "Gastos variáveis".
+   */
+  simulatorCandidates(recurringMerchants: ReadonlySet<string> = new Set()): SimulatorCandidate[] {
     const out: SimulatorCandidate[] = [];
     const groups = new Map<string, Transaction[]>();
     for (const t of this.current) {
       if (t.amount <= 0 || t.installment) continue;
-      const sub = isSubscription(t, this.input.config);
+      const sub =
+        isSubscription(t, this.input.config) ||
+        Boolean(t.predictedFrom) ||
+        (Boolean(t.merchantKey) && t.merchantKey !== "desconhecido" && recurringMerchants.has(t.merchantKey));
       const variable = !CATEGORIES[t.category]?.essential;
       if (!sub && !variable) continue;
-      const key = `${sub ? "s" : "v"}|${t.merchantKey}`;
+      const key = `${sub ? "s" : "v"}|${t.merchantKey || t.id}`;
       groups.set(key, [...(groups.get(key) ?? []), t]);
     }
     for (const [key, list] of groups) {
@@ -420,6 +432,35 @@ export class RuleBasedSavingsEngine {
       a.kind === b.kind ? b.monthlyAmount - a.monthlyAmount : a.kind === "subscription" ? -1 : 1,
     );
   }
+}
+
+/**
+ * Lojas que se repetem: aparecem no mês (até 3 vezes) e em pelo menos mais um dos
+ * `window - 1` meses anteriores (sem parcelas). Use o histórico completo, inclusive o que ficou no fechamento:
+ * aqui só importa o padrão, não os valores.
+ */
+export function repeatedMerchants(
+  byMonth: Record<MonthKey, Transaction[]>,
+  month: MonthKey,
+  window = 4,
+): Set<string> {
+  const keysOf = (m: MonthKey) =>
+    (byMonth[m] ?? [])
+      .filter((t) => t.amount > 0 && !t.installment && !t.predictedFrom && t.merchantKey && t.merchantKey !== "desconhecido")
+      .map((t) => t.merchantKey);
+  const before = monthRange(addMonths(month, -1), window - 1).map((m) => new Set(keysOf(m)));
+  const now = keysOf(month);
+  const count = new Map<string, number>();
+  for (const k of now) count.set(k, (count.get(k) ?? 0) + 1);
+  const out = new Set<string>();
+  // Muitas compras no mês (iFood, Uber) é gasto formiguinha, não conta que se repete.
+  for (const [k, n] of count) if (n <= 3 && before.some((s) => s.has(k))) out.add(k);
+  return out;
+}
+
+/** Lojas com "Repete todo mês" ligado (recorrentes de cartão ativas). */
+export function cardRecurringMerchants(debts: { kind: string; active: boolean; merchantKey?: string; cardId?: string }[]): Set<string> {
+  return new Set(debts.filter((d) => d.kind === "CARTAO" && d.active && d.cardId && d.merchantKey).map((d) => d.merchantKey!));
 }
 
 /** Economia simulada: soma dos itens marcados e % sobre a fatura total. */
