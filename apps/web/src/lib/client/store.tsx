@@ -24,6 +24,8 @@ export interface AppState {
     authConfigured: boolean;
     driveConfigured: boolean;
     pluggyConfigured: boolean;
+    /** Lembretes por e-mail ligados no servidor (CRON_SECRET + RESEND_API_KEY). */
+    remindersConfigured?: boolean;
     /** Chaves da Pluggy existem, mas o app está público sem login: bloqueado. */
     pluggyNeedsLogin?: boolean;
   };

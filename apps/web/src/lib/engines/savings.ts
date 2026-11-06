@@ -11,7 +11,10 @@
  *                             ou acima do teto definido pelo casal.
  *  4. HIGH_FREQUENCY          "Gastos formiguinha": estabelecimento/categoria variável com
  *                             mais de N ocorrências no mês; mostra cortes de 30% e 50%.
- *  5. Simulador               `simulatorCandidates` lista assinaturas e gastos variáveis
+ *  5. BANK_FEES              Tarifas que dá para evitar: anuidade, juros, IOF, multa, mora,
+ *                             encargos, seguro do cartão, saque no crédito.
+ *  6. FUTURE_INSTALLMENTS     Parcelas já contratadas para o mês que vem passam de 30% da meta.
+ *  7. Simulador               `simulatorCandidates` lista assinaturas e gastos variáveis
  *                             para o casal marcar e ver a economia em tempo real.
  *
  * As mensagens NÃO trazem valores em texto: a interface monta o texto com o
@@ -21,12 +24,15 @@ import { CATEGORIES } from "../domain/categories";
 import { monthRange, addMonths } from "../domain/months";
 import type { Cents, CategoryId, HouseholdConfig, MonthKey, Transaction, UserId } from "../domain/types";
 import { isSubscription, sumCents } from "./analytics";
+import { committedIn } from "./installments";
 
 export type SavingsRule =
   | "DUPLICATE_SUBSCRIPTION"
   | "SUBSCRIPTION_INFLATION"
   | "SECTOR_OVERRUN"
-  | "HIGH_FREQUENCY";
+  | "HIGH_FREQUENCY"
+  | "BANK_FEES"
+  | "FUTURE_INSTALLMENTS";
 
 export type Severity = "high" | "medium" | "low";
 
@@ -57,8 +63,39 @@ export interface SavingsRecommendation {
         total: Cents;
         cut30: Cents;
         cut50: Cents;
+      }
+    | { kind: "fees"; items: { name: string; type: FeeType; paidBy: UserId; amount: Cents }[] }
+    | {
+        kind: "commitment";
+        nextMonth: MonthKey;
+        committed: Cents;
+        goal: Cents;
+        pctOfGoal: number;
+        /** Primeiro mês em que as parcelas voltam a ficar abaixo do limite (null = depois de 12 meses). */
+        relief: MonthKey | null;
       };
 }
+
+export type FeeType = "anuidade" | "juros" | "iof" | "multa" | "seguro" | "saque" | "tarifa";
+
+const FEE_PATTERNS: [FeeType, RegExp][] = [
+  ["anuidade", /\banuidade\b/i],
+  ["juros", /\b(juros|rotativo|encargos?|financ\.? fatura|parcelamento de fatura)\b|\bmora (cart|fatura)/i],
+  ["iof", /\biof\b/i],
+  ["multa", /\bmulta\b/i],
+  ["seguro", /\bseguro\b.*\b(cart|fatura|prote|perda|roubo|prestamista)/i],
+  ["saque", /\bsaque\b/i],
+  ["tarifa", /\b(tarifa|taxa de servi|avaliacao emergencial|avaliação emergencial)\b/i],
+];
+
+/** Tipo de tarifa do cartão pela descrição do lançamento (ou null se é compra comum). */
+export function feeTypeOf(description: string): FeeType | null {
+  for (const [type, re] of FEE_PATTERNS) if (re.test(description)) return type;
+  return null;
+}
+
+/** Parcelas do mês que vem acima desta fração da meta viram alerta. */
+export const COMMITMENT_LIMIT = 0.3;
 
 export interface SimulatorCandidate {
   id: string;
@@ -110,6 +147,8 @@ export class RuleBasedSavingsEngine {
       ...this.subscriptionInflation(),
       ...this.sectorOverruns(),
       ...this.highFrequency(),
+      ...this.bankFees(),
+      ...this.futureInstallments(),
     ];
     const weight: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
     return recs.sort((a, b) => weight[a.severity] - weight[b.severity] || b.monthlySavings - a.monthlySavings);
@@ -280,6 +319,60 @@ export class RuleBasedSavingsEngine {
     return out;
   }
 
+  /** Regra 5: tarifas que dá para evitar. */
+  bankFees(): SavingsRecommendation[] {
+    const items = this.current
+      .filter((t) => t.amount > 0 && !t.predictedFrom)
+      .map((t) => ({ t, type: feeTypeOf(t.description) }))
+      .filter((x): x is { t: Transaction; type: FeeType } => x.type !== null);
+    if (items.length === 0) return [];
+    const total = items.reduce((s, x) => s + x.t.amount, 0);
+    const kinds = new Set(items.map((x) => x.type));
+    return [
+      {
+        id: "fees",
+        rule: "BANK_FEES",
+        severity: kinds.has("juros") || kinds.has("multa") ? "high" : "medium",
+        title: items.length === 1 ? "1 tarifa do cartão que dá para evitar" : `${items.length} tarifas do cartão que dá para evitar`,
+        monthlySavings: total,
+        details: {
+          kind: "fees",
+          items: items.map((x) => ({ name: x.t.description, type: x.type, paidBy: x.t.paidBy, amount: x.t.amount })),
+        },
+      },
+    ];
+  }
+
+  /** Regra 6: parcelas demais já contratadas para os próximos meses. */
+  futureInstallments(): SavingsRecommendation[] {
+    const goal = this.input.config.monthlyGoal;
+    if (goal <= 0) return [];
+    const { month } = this.input;
+    const txs = this.current;
+    const next = addMonths(month, 1);
+    const committed = committedIn(txs, month, next);
+    if (committed <= goal * COMMITMENT_LIMIT) return [];
+    let relief: MonthKey | null = null;
+    for (let i = 2; i <= 12; i++) {
+      const m = addMonths(month, i);
+      if (committedIn(txs, month, m) <= goal * COMMITMENT_LIMIT) {
+        relief = m;
+        break;
+      }
+    }
+    const pct = (committed / goal) * 100;
+    return [
+      {
+        id: "future-installments",
+        rule: "FUTURE_INSTALLMENTS",
+        severity: pct >= 50 ? "high" : "medium",
+        title: "Parcelas demais nos próximos meses",
+        monthlySavings: 0,
+        details: { kind: "commitment", nextMonth: next, committed, goal, pctOfGoal: pct, relief },
+      },
+    ];
+  }
+
   private frequencyRec(id: string, label: string, list: Transaction[]): SavingsRecommendation {
     const total = sumCents(list);
     return {
@@ -299,7 +392,7 @@ export class RuleBasedSavingsEngine {
     };
   }
 
-  /** Regra 5: itens para o simulador "E se cortarmos?" */
+  /** Regra 7: itens para o simulador "E se cortarmos?" */
   simulatorCandidates(): SimulatorCandidate[] {
     const out: SimulatorCandidate[] = [];
     const groups = new Map<string, Transaction[]>();

@@ -61,6 +61,8 @@ export interface UserProfile {
   /** E-mail Google autorizado (preenchido a partir do .env no servidor; nunca exibido para terceiros). */
   email?: string;
   avatarColor: string;
+  /** Quando a pessoa terminou (ou pulou) o primeiro acesso guiado. */
+  onboardedAt?: string;
 }
 
 export type CardBrand = "visa" | "mastercard" | "elo" | "amex" | "hipercard" | "outra";
@@ -102,6 +104,10 @@ export interface HouseholdConfig {
   /** Conexões Open Finance (Meu Pluggy). O itemId sozinho não dá acesso a nada sem o client secret. */
   pluggyItems?: PluggyItemLink[];
   pluggyLastSyncAt?: string;
+  /** Faturas de cartão marcadas como pagas no app: "idDoCartão|YYYY-MM". Só uma marca, nenhum pagamento. */
+  paidCardBills?: string[];
+  /** Quem quer receber lembrete de vencimento por e-mail (padrão: sim, se o e-mail estiver configurado). */
+  reminderEmails?: Partial<Record<UserId, boolean>>;
   updatedAt: string;
 }
 
@@ -153,8 +159,21 @@ export interface Transaction {
   externalId?: string;
   /** Conexão Open Finance de onde a compra veio (para apagar ao desconectar). */
   pluggyItemId?: string;
+  /** Compra nova que ainda ninguém conferiu (categoria e divisão). Some quando alguém confirma ou edita. */
+  toReview?: boolean;
+  /** Pergunta de um para o outro sobre a compra ("o que é isso?"). */
+  question?: PurchaseQuestion;
   /** Só na tela (nunca salvo): compra recorrente prevista que o banco ainda não trouxe. Id da recorrente. */
   predictedFrom?: string;
+}
+
+export interface PurchaseQuestion {
+  by: UserId;
+  text: string;
+  at: string;
+  answer?: string;
+  answeredBy?: UserId;
+  answeredAt?: string;
 }
 
 export type RecurringKind = "BOLETO" | "CONTA_FIXA" | "FINANCIAMENTO" | "PARCELAMENTO" | "ASSINATURA" | "CARTAO";
@@ -183,6 +202,8 @@ export interface RecurringDebt {
   /** Só para "CARTAO": cartão e estabelecimento da compra que se repete. */
   cardId?: string;
   merchantKey?: string;
+  /** Meses em que a conta foi marcada como paga no app ("Já paguei"). Só uma marca, nenhum pagamento. */
+  paidMonths?: MonthKey[];
 }
 
 export interface RecurringDebtsFile {
@@ -213,6 +234,8 @@ export interface BankBill {
   total: Cents;
   paid: Cents;
   status: "paga" | "parcial" | "em aberto";
+  /** Vencimento da fatura informado pelo banco ("YYYY-MM-DD"). */
+  dueDate?: string;
 }
 
 /** Linha que entra no encontro de contas: transação de cartão ou dívida recorrente. */

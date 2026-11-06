@@ -13,6 +13,7 @@ import { Card, CardHeader } from "../ui/card";
 import { Input, Label, Select } from "../ui/field";
 import { IconBox } from "../ui/icon-box";
 import { Sheet } from "../ui/sheet";
+import { Switch } from "../ui/switch";
 import { MerchantsCard } from "./merchants-card";
 import { OpenFinanceCard } from "./open-finance-card";
 import { SubscriptionsCard } from "./subscriptions-card";
@@ -76,6 +77,27 @@ function IncomeCard({ cfg, me, set }: { cfg: HouseholdConfig; me: UserId; set: (
       </div>
       <p className="mt-2 text-[11px] text-zinc-500">Cada um só consegue mudar o próprio salário.</p>
     </Card>
+  );
+}
+
+/** Lembrete por e-mail 3 dias antes e no dia do vencimento (cada um liga o seu). */
+function ReminderToggle({ cfg, me, on, set }: { cfg: HouseholdConfig; me: UserId; on: boolean; set: (fn: (c: HouseholdConfig) => HouseholdConfig) => void }) {
+  const mine = cfg.reminderEmails?.[me] !== false;
+  return (
+    <div className="mb-4 rounded-2xl bg-zinc-50 p-3">
+      <label className="flex items-center justify-between gap-3">
+        <span>
+          <span className="block text-sm font-semibold">Lembrete por e-mail</span>
+          <span className="block text-xs text-zinc-500">3 dias antes e no dia, só das contas e faturas que são suas. O e-mail não mostra valores.</span>
+        </span>
+        <Switch
+          checked={on && mine}
+          disabled={!on}
+          onCheckedChange={(v) => set((c) => ({ ...c, reminderEmails: { ...c.reminderEmails, [me]: v } }))}
+        />
+      </label>
+      {!on && <p className="mt-2 text-xs text-amber-700">Ainda desligado no servidor: falta configurar o envio de e-mail (veja o DEPLOY.md, passo 8).</p>}
+    </div>
   );
 }
 
@@ -290,6 +312,7 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
 
       <Card id="contas">
         <CardHeader icon={<IconBox><ReceiptText /></IconBox>} title="Contas fixas, boletos e vencimentos" subtitle="Aluguel, condomínio, água, internet, parcela do carro e compras do cartão que se repetem" />
+        <ReminderToggle cfg={cfg} me={state!.viewer.userId} on={Boolean(mode.remindersConfigured)} set={set} />
         <RecurringTab />
       </Card>
 

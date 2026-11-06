@@ -7,6 +7,7 @@ import { AppProvider, useStore } from "@/lib/client/store";
 import { BottomNav } from "./bottom-nav";
 import { Header } from "./header";
 import { LoadingScreen } from "./loading-screen";
+import { Onboarding } from "./onboarding";
 import { Toasts } from "./toasts";
 
 function Body({ children }: { children: React.ReactNode }) {
@@ -33,6 +34,7 @@ function Body({ children }: { children: React.ReactNode }) {
   return (
     <>
       <Header />
+      <Onboarding />
       {state.mode.demo && (
         <div className="mb-2 flex items-start gap-2 rounded-2xl border border-amber-100 bg-amber-50/80 px-3 py-2 text-xs text-amber-800">
           <ShieldCheck className="mt-0.5 size-4 shrink-0" />

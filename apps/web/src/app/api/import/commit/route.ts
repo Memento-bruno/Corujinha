@@ -46,6 +46,7 @@ export async function POST(req: Request) {
           split: rule?.split ?? { type: "SHARED_DEFAULT" },
           installment: row.installment,
           source: body.source,
+          ...(rule ? {} : { toReview: true }),
         });
       }
       try {

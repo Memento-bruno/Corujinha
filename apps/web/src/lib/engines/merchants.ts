@@ -68,3 +68,21 @@ export function merchantList(cfg: HouseholdConfig): { key: string; rule: Merchan
     .map(([key, rule]) => ({ key, rule }))
     .sort((a, b) => b.rule.updatedAt.localeCompare(a.rule.updatedAt));
 }
+
+/**
+ * Compra nova que vale conferir: o app não conhece o fornecedor, não é parcela de compra
+ * antiga (já conferida no mês da 1ª parcela) nem a linha de ajuste da fatura, e é recente
+ * (até 40 dias), para a primeira sincronização não encher a lista com meses antigos.
+ */
+export function shouldReview(rules: MerchantRules | undefined, tx: Transaction, today = new Date()): boolean {
+  if (tx.amount <= 0 || tx.merchantKey === "ajuste-fatura") return false;
+  if (tx.installment && tx.installment.current > 1) return false;
+  if (tx.merchantKey && rules?.[tx.merchantKey]) return false;
+  const age = (today.getTime() - Date.parse(tx.date)) / 86_400_000;
+  return age <= 40;
+}
+
+/** Marca a compra para revisão quando ela precisa. */
+export function flagForReview(rules: MerchantRules | undefined, tx: Transaction, today = new Date()): Transaction {
+  return shouldReview(rules, tx, today) ? { ...tx, toReview: true } : tx;
+}

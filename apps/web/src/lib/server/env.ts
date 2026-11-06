@@ -64,6 +64,18 @@ export const env = {
   get pluggyWebhookSecret() {
     return v("PLUGGY_WEBHOOK_SECRET");
   },
+  /** Chave da Resend (resend.com) para os lembretes por e-mail. Sem ela, os lembretes ficam desligados. */
+  get resendApiKey() {
+    return v("RESEND_API_KEY");
+  },
+  /** Remetente dos lembretes (precisa ser de um domínio verificado na Resend, ou onboarding@resend.dev para testar). */
+  get reminderFrom() {
+    return v("REMINDER_FROM") ?? "Corujinha <onboarding@resend.dev>";
+  },
+  /** Segredo que a Vercel manda no cabeçalho Authorization das tarefas agendadas (cron). */
+  get cronSecret() {
+    return v("CRON_SECRET");
+  },
   get appUrl() {
     return v("AUTH_URL") ?? "http://localhost:3000";
   },

@@ -1,6 +1,6 @@
 import { addMonths, isMonthKey, monthRange } from "@/lib/domain/months";
 import { getDatabase } from "@/lib/server/database";
-import { isAuthConfigured, isDemoMode, isDriveConfigured, isPluggyBlockedByMissingLogin, isPluggyConfigured } from "@/lib/server/env";
+import { env, isAuthConfigured, isDemoMode, isDriveConfigured, isPluggyBlockedByMissingLogin, isPluggyConfigured } from "@/lib/server/env";
 import { handle, BadRequestError } from "@/lib/server/http";
 import { requireViewer } from "@/lib/server/session";
 
@@ -53,6 +53,7 @@ export async function GET(req: Request) {
         authConfigured: isAuthConfigured(),
         driveConfigured: isDriveConfigured(),
         pluggyConfigured: isPluggyConfigured(),
+        remindersConfigured: Boolean(env.cronSecret && env.resendApiKey),
         pluggyNeedsLogin: isPluggyBlockedByMissingLogin(),
       },
       viewer,

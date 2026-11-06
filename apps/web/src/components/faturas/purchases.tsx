@@ -1,11 +1,11 @@
 "use client";
 
-import { Check, ChevronDown, Lock, Repeat, Search, Sparkles, Trash2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Check, CheckCheck, ChevronDown, Lock, MessageCircleQuestion, Repeat, Search, Sparkles, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useDerived, useFmt } from "@/lib/client/derived";
 import { useStore } from "@/lib/client/store";
 import { CATEGORIES, CATEGORY_IDS } from "@/lib/domain/categories";
-import type { CategoryId, RecurringDebt, Split, Transaction } from "@/lib/domain/types";
+import { otherUser, type CategoryId, type PurchaseQuestion, type RecurringDebt, type Split, type Transaction } from "@/lib/domain/types";
 import { SUBSCRIPTION_TAG, isSubscription } from "@/lib/engines/analytics";
 import { learnMerchant, propagateToSameMerchant } from "@/lib/engines/merchants";
 import { cardRecurringFor } from "@/lib/engines/recurring";
@@ -15,7 +15,7 @@ import { MerchantLogo } from "../home/merchant-logo";
 import { Switch } from "../ui/switch";
 import { splitLabel } from "./split-badge";
 
-type Filter = "all" | "shared" | "a" | "b" | "parc" | "subs" | "prev";
+type Filter = "all" | "rev" | "ask" | "shared" | "a" | "b" | "parc" | "subs" | "prev";
 type Sort = "recent" | "high" | "low";
 
 const WEEKDAY = new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: "UTC" });
@@ -41,6 +41,13 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
   const [sort, setSort] = useState<Sort>("recent");
   const [open, setOpen] = useState<string | null>(null);
   const [saved, setSaved] = useState<{ id: string; text: string } | null>(null);
+  const me = state!.viewer.userId;
+  // Vindo do Início ("Para conferir"): abre já filtrado.
+  useEffect(() => {
+    const f = new URLSearchParams(window.location.search).get("filtro");
+    if (f === "revisar") setFilter("rev");
+    if (f === "perguntas") setFilter("ask");
+  }, []);
   const debts = state!.recurring.data.debts;
   const cards = Object.fromEntries(d.config.cards.map((c) => [c.id, c]));
   const first = (u: "USER_A" | "USER_B") => d.users[u].name.split(" ")[0];
@@ -49,6 +56,8 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
     const real = txs.filter((t) => !t.predictedFrom);
     return {
       all: real.length,
+      rev: real.filter((t) => t.toReview).length,
+      ask: real.filter((t) => t.question && !t.question.answer).length,
       shared: real.filter((t) => isShared(t.split)).length,
       a: real.filter((t) => t.split.type === "INDIVIDUAL_A").length,
       b: real.filter((t) => t.split.type === "INDIVIDUAL_B").length,
@@ -68,6 +77,10 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
         if (!hay.includes(needle) && !byValue) return false;
       }
       switch (filter) {
+        case "rev":
+          return Boolean(t.toReview) && !t.predictedFrom;
+        case "ask":
+          return Boolean(t.question && !t.question.answer);
         case "shared":
           return !t.predictedFrom && isShared(t.split);
         case "a":
@@ -128,7 +141,8 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
   };
 
   /** Muda setor/divisão: salva, lembra o fornecedor e passa para as outras compras dele no mês. */
-  const change = (before: Transaction, after: Transaction) => {
+  const change = (before: Transaction, edited: Transaction) => {
+    const { toReview: _r, ...after } = edited;
     const learned: { category?: CategoryId; split?: Split } = {};
     if (before.category !== after.category) learned.category = after.category;
     if (JSON.stringify(before.split) !== JSON.stringify(after.split)) learned.split = after.split;
@@ -167,6 +181,29 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
     if (!on) void updateConfig((c) => ({ ...c, subscriptionMerchants: c.subscriptionMerchants.filter((k) => k !== t.merchantKey) }));
   };
 
+  /** Atualiza só esta compra no arquivo do mês (pela versão mais nova dela). */
+  const patch = (id: string, fn: (t: Transaction) => Transaction) =>
+    void updateStatement(d.month, (s) => ({ ...s, transactions: s.transactions.map((x) => (x.id === id ? fn(x) : x)) }));
+
+  const confirm = (t: Transaction) => {
+    patch(t.id, ({ toReview: _r, ...x }) => x);
+    setSaved({ id: t.id, text: "Conferida." });
+  };
+
+  const confirmAll = (ids: string[]) => {
+    const set = new Set(ids);
+    void updateStatement(d.month, (s) => ({ ...s, transactions: s.transactions.map((x) => (set.has(x.id) ? (({ toReview: _r, ...y }) => y)(x) : x)) }));
+    toast(`${ids.length} compra${ids.length === 1 ? "" : "s"} conferida${ids.length === 1 ? "" : "s"}.`, "success");
+    setFilter("all");
+  };
+
+  const ask = (t: Transaction, q: PurchaseQuestion | undefined) => {
+    patch(t.id, (x) => {
+      const { question: _q, ...rest } = x;
+      return q ? { ...rest, question: q } : rest;
+    });
+  };
+
   const remove = (t: Transaction) => {
     if (t.predictedFrom) {
       syncRecurring(t, false);
@@ -189,6 +226,8 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
 
   const chips: { value: Filter; label: string; n: number }[] = [
     { value: "all", label: "Todas", n: counts.all },
+    { value: "rev", label: "Para conferir", n: counts.rev },
+    { value: "ask", label: "Perguntas", n: counts.ask },
     { value: "shared", label: "Divididas", n: counts.shared },
     { value: "a", label: `Só ${first("USER_A")}`, n: counts.a },
     { value: "b", label: `Só ${first("USER_B")}`, n: counts.b },
@@ -218,6 +257,9 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
       }}
       onSub={(v) => toggleSub(t, v)}
       onRemove={() => remove(t)}
+      onConfirm={() => confirm(t)}
+      onAsk={(q) => ask(t, q)}
+      me={me}
       fmtMoney={fmt.money}
     />
   );
@@ -288,6 +330,21 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
         </p>
       )}
 
+      {filter === "rev" && counts.rev > 0 && !closed && (
+        <div className="mt-3 flex flex-col gap-2 rounded-2xl bg-sky-50 p-3 sm:flex-row sm:items-center">
+          <CheckCheck className="size-5 shrink-0 text-sky-700" />
+          <p className="flex-1 text-sm text-zinc-700">
+            Compras novas que o app ainda não conhecia. Toque em cada uma para acertar <b>de quem é</b> e a <b>categoria</b>, ou confirme todas como estão.
+          </p>
+          <button
+            onClick={() => confirmAll(sorted.filter((t) => t.toReview).map((t) => t.id))}
+            className="h-9 rounded-full bg-zinc-900 px-4 text-sm font-semibold text-white"
+          >
+            Estão certas
+          </button>
+        </div>
+      )}
+
       {d.suggestedSubscriptions.length > 0 && !closed && (
         <div className="mt-3 flex flex-col gap-2 rounded-2xl bg-indigo-50 p-3 sm:flex-row sm:items-center">
           <Sparkles className="size-5 shrink-0 text-[#4f52d6]" />
@@ -341,6 +398,9 @@ function Row({
   onRepeat,
   onSub,
   onRemove,
+  onConfirm,
+  onAsk,
+  me,
   fmtMoney,
 }: {
   tx: Transaction;
@@ -354,6 +414,9 @@ function Row({
   onRepeat: (v: boolean) => void;
   onSub: (v: boolean) => void;
   onRemove: () => void;
+  onConfirm: () => void;
+  onAsk: (q: PurchaseQuestion | undefined) => void;
+  me: "USER_A" | "USER_B";
   fmtMoney: (c: number) => string;
 }) {
   const d = useDerived();
@@ -402,6 +465,17 @@ function Row({
             {tx.installment && tx.installment.total > 1 && (
               <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-semibold text-[#4f52d6]">
                 Parcela {tx.installment.current} de {tx.installment.total}
+              </span>
+            )}
+            {tx.toReview && !pred && <span className="rounded-full bg-sky-100 px-2 py-0.5 font-semibold text-sky-800">Nova · conferir</span>}
+            {tx.question && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold",
+                  tx.question.answer ? "bg-zinc-100 text-zinc-700" : "bg-violet-100 text-violet-800",
+                )}
+              >
+                <MessageCircleQuestion className="size-3" /> {tx.question.answer ? "Respondida" : tx.question.by === me ? "Você perguntou" : `${first(tx.question.by)} perguntou`}
               </span>
             )}
             {pred && <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">Prevista · repete todo mês</span>}
@@ -480,6 +554,18 @@ function Row({
             </div>
           </div>
 
+          {tx.toReview && !pred && (
+            <button
+              type="button"
+              onClick={onConfirm}
+              className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full bg-sky-700 text-sm font-semibold text-white"
+            >
+              <Check className="size-4" /> Está certa assim
+            </button>
+          )}
+
+          {!pred && <QuestionBox q={tx.question} me={me} partner={first(otherUser(me))} name={first} onAsk={onAsk} />}
+
           {!tx.installment && tx.amount > 0 && (
             <label className="flex items-center justify-between gap-3">
               <span>
@@ -516,5 +602,73 @@ function Row({
         </fieldset>
       )}
     </li>
+  );
+}
+
+/** "O que é isso?": um pergunta, o outro responde, dentro da própria compra. */
+function QuestionBox({
+  q,
+  me,
+  partner,
+  name,
+  onAsk,
+}: {
+  q?: PurchaseQuestion;
+  me: "USER_A" | "USER_B";
+  partner: string;
+  name: (u: "USER_A" | "USER_B") => string;
+  onAsk: (q: PurchaseQuestion | undefined) => void;
+}) {
+  const [text, setText] = useState("");
+  const now = () => new Date().toISOString();
+  const input = (placeholder: string, label: string, send: () => void) => (
+    <form
+      className="mt-2 flex gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (text.trim()) send();
+        setText("");
+      }}
+    >
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        maxLength={280}
+        placeholder={placeholder}
+        className="h-10 min-w-0 flex-1 rounded-xl border border-zinc-200 bg-white px-3 text-sm outline-none focus:border-zinc-400"
+      />
+      <button type="submit" disabled={!text.trim()} className="h-10 shrink-0 rounded-full bg-zinc-900 px-4 text-sm font-semibold text-white disabled:opacity-40">
+        {label}
+      </button>
+    </form>
+  );
+  if (!q) {
+    return (
+      <div>
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <MessageCircleQuestion className="size-4 text-violet-700" /> Perguntar para {partner}
+        </p>
+        {input("O que é isso?", "Perguntar", () => onAsk({ by: me, text: text.trim(), at: now() }))}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-2xl bg-violet-50 p-3 text-sm">
+      <p>
+        <b>{q.by === me ? "Você" : name(q.by)}:</b> {q.text}
+      </p>
+      {q.answer ? (
+        <p className="mt-1">
+          <b>{q.answeredBy === me ? "Você" : name(q.answeredBy ?? otherUser(q.by))}:</b> {q.answer}
+        </p>
+      ) : q.by !== me ? (
+        input("Responder", "Responder", () => onAsk({ ...q, answer: text.trim(), answeredBy: me, answeredAt: now() }))
+      ) : (
+        <p className="mt-1 text-xs text-zinc-500">Esperando {partner} responder.</p>
+      )}
+      <button type="button" onClick={() => onAsk(undefined)} className="mt-2 text-xs font-semibold text-violet-800 underline underline-offset-2">
+        {q.answer ? "Resolvido, apagar conversa" : "Apagar pergunta"}
+      </button>
+    </div>
   );
 }

@@ -1,13 +1,14 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Bug, Copy, Calculator, TrendingUp, Flame, PiggyBank, Repeat } from "lucide-react";
+import { Bug, Copy, Calculator, TrendingUp, Flame, PiggyBank, Repeat, Landmark, CalendarRange, CalendarCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useDerived, useFmt, type Fmt } from "@/lib/client/derived";
 import { CATEGORIES } from "@/lib/domain/categories";
-import { monthLabel } from "@/lib/domain/months";
+import { monthLabel, monthShort } from "@/lib/domain/months";
 import type { UserId } from "@/lib/domain/types";
-import { simulateCuts, type SavingsRecommendation, type SavingsRule } from "@/lib/engines/savings";
+import { simulateCuts, type FeeType, type SavingsRecommendation, type SavingsRule } from "@/lib/engines/savings";
+import { freedByMonth } from "@/lib/engines/installments";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { Card, CardHeader } from "../ui/card";
@@ -19,6 +20,18 @@ const RULE_META: Record<SavingsRule, { label: string; icon: React.ReactNode; tin
   SUBSCRIPTION_INFLATION: { label: "Inflação silenciosa", icon: <TrendingUp />, tint: "from-rose-50" },
   SECTOR_OVERRUN: { label: "Estouro de média", icon: <Flame />, tint: "from-amber-50" },
   HIGH_FREQUENCY: { label: "Gasto formiguinha", icon: <Bug />, tint: "from-sky-50" },
+  BANK_FEES: { label: "Tarifa evitável", icon: <Landmark />, tint: "from-orange-50" },
+  FUTURE_INSTALLMENTS: { label: "Parcelas demais", icon: <CalendarRange />, tint: "from-fuchsia-50" },
+};
+
+const FEE_LABEL: Record<FeeType, string> = {
+  anuidade: "Anuidade: peça isenção ou troque por um cartão sem anuidade.",
+  juros: "Juros da fatura: pagar o total da fatura evita esse custo.",
+  iof: "IOF: aparece em compras no exterior e em juros.",
+  multa: "Multa por atraso: pagar até o vencimento evita.",
+  seguro: "Seguro do cartão: costuma ser opcional e dá para cancelar no app do banco.",
+  saque: "Saque no crédito: tem juros altos desde o primeiro dia.",
+  tarifa: "Tarifa do banco: muitas vezes dá para pedir o estorno.",
 };
 
 const SEVERITY: Record<SavingsRecommendation["severity"], string> = {
@@ -70,6 +83,8 @@ export function CortesView() {
         </AnimatePresence>
         {d.recommendations.length === 0 && <Card className="text-sm text-zinc-500 md:col-span-2">Nenhum alerta neste mês. Mandaram bem! 🎉</Card>}
       </div>
+
+      <InstallmentsEnding />
 
       <Simulator />
     </div>
@@ -135,6 +150,37 @@ function RecommendationCard({ rec, fmt, name }: { rec: SavingsRecommendation; fm
           </div>
         </div>
       </div>
+    );
+  }
+  else if (det.kind === "fees") {
+    const types = [...new Set(det.items.map((x) => x.type))];
+    body = (
+      <div className="text-xs text-zinc-600">
+        <ul className="space-y-1">
+          {det.items.map((m, i) => (
+            <li key={i} className="flex justify-between gap-2">
+              <span className="truncate">
+                {m.name} · cartão de {name(m.paidBy)}
+              </span>
+              <span className="tabular font-semibold text-zinc-800">{fmt.money(m.amount)}</span>
+            </li>
+          ))}
+        </ul>
+        <ul className="mt-2 space-y-0.5 text-zinc-500">
+          {types.map((t) => (
+            <li key={t}>{FEE_LABEL[t]}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  } else if (det.kind === "commitment") {
+    body = (
+      <p className="text-xs text-zinc-600">
+        Em {monthLabel(det.nextMonth)} já tem <b className="tabular">{fmt.money(det.committed)}</b> só de parcelas, ou{" "}
+        <b className="text-rose-600">{fmt.pct(det.pctOfGoal)}</b> da meta do mês.{" "}
+        {det.relief ? <>Só volta a ficar abaixo de 30% da meta em <b>{monthLabel(det.relief)}</b>.</> : <>Continua acima de 30% da meta pelos próximos 12 meses.</>}{" "}
+        Vale segurar compras parceladas novas até lá.
+      </p>
     );
   }
   return (
@@ -231,6 +277,64 @@ function Simulator() {
           </ul>
         </div>
       ))}
+    </Card>
+  );
+}
+
+/** Quando cada parcelamento termina e quanto sobra a mais em cada mês. */
+function InstallmentsEnding() {
+  const d = useDerived();
+  const fmt = useFmt(d.coupleTotal);
+  const months = useMemo(() => freedByMonth(d.txs, d.month, 12), [d.txs, d.month]);
+  const withEnding = months.filter((m) => m.ending.length > 0);
+  const max = Math.max(1, ...months.map((m) => m.freed));
+  return (
+    <Card>
+      <CardHeader
+        icon={<IconBox><CalendarCheck /></IconBox>}
+        title="Parcelas que acabam"
+        subtitle="Quanto deixa de sair da fatura em cada mês, comparado a este"
+      />
+      {withEnding.length === 0 ? (
+        <p className="text-sm text-zinc-500">Nenhuma compra parcelada neste mês.</p>
+      ) : (
+        <>
+          <div className="mb-4 flex h-28 items-end gap-1.5" aria-hidden>
+            {months.map((m) => (
+              <div key={m.month} className="flex flex-1 flex-col items-center gap-1">
+                <span className="tabular text-[10px] font-semibold text-emerald-700">{m.freed > 0 ? fmt.num(m.freed) : ""}</span>
+                <motion.div
+                  className="w-full rounded-t-md bg-emerald-400"
+                  initial={{ height: 0 }}
+                  animate={{ height: `${(m.freed / max) * 72}px` }}
+                  transition={{ duration: 0.5 }}
+                />
+                <span className="text-[10px] text-zinc-500">{monthShort(m.month)}</span>
+              </div>
+            ))}
+          </div>
+          <ul className="divide-y divide-zinc-100">
+            {withEnding.map((m) => (
+              <li key={m.month} className="py-2">
+                <p className="flex justify-between text-sm font-semibold text-zinc-900">
+                  <span>A partir de {monthLabel(m.month)}</span>
+                  <span className="tabular text-emerald-700">+{fmt.money(m.ending.reduce((s, x) => s + x.amount, 0))}/mês</span>
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {m.ending.map((x) => (
+                    <li key={x.id} className="flex justify-between gap-2 text-xs text-zinc-600">
+                      <span className="truncate">
+                        {x.description} · {d.users[x.paidBy].name.split(" ")[0]} · última parcela {String(x.total).padStart(2, "0")}/{String(x.total).padStart(2, "0")}
+                      </span>
+                      <span className="tabular">{fmt.money(x.amount)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </Card>
   );
 }

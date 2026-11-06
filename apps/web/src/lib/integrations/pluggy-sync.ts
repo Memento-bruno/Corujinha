@@ -1,8 +1,8 @@
 import "server-only";
 import { addMonths, monthOf } from "../domain/months";
 import type { BankBill, HouseholdConfig, MonthKey, Transaction } from "../domain/types";
-import { applyMerchantRule } from "../engines/merchants";
-import { applyCardRecurring } from "../engines/recurring";
+import { applyMerchantRule, flagForReview } from "../engines/merchants";
+import { applyCardRecurring, cardRecurringFor } from "../engines/recurring";
 import { ConflictError } from "../server/blob-store";
 import type { DriveDatabaseService } from "../server/database";
 import { getBills, getCreditAccounts, getTransactions } from "./pluggy-client";
@@ -60,7 +60,7 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
           const m = b.dueDate.slice(0, 7);
           if (m < firstMonth) continue;
           const p = pay.get(b.id)!;
-          billsByMonth.set(m, { ...billsByMonth.get(m), [resolver.main.id]: { total: Math.round((b.totalAmount ?? 0) * 100), paid: p.paid, status: p.status } });
+          billsByMonth.set(m, { ...billsByMonth.get(m), [resolver.main.id]: { total: Math.round((b.totalAmount ?? 0) * 100), paid: p.paid, status: p.status, dueDate: b.dueDate.slice(0, 10) } });
         }
         for (const c of resolver.created) {
           cfg.cards.push(c);
@@ -114,7 +114,12 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   const isOrphan = (t: Transaction) =>
     allClean && t.source === "pluggy" && (t.pluggyItemId ? !itemIds.has(t.pluggyItemId) : !syncedCardIds.has(t.cardId));
   for (const month of [...months].sort()) {
-    const incoming = (byMonth.get(month) ?? []).map((t) => applyCardRecurring(debts, applyMerchantRule(cfg.merchantRules, t)));
+    // Na primeira sincronização tudo é novo: não pede revisão de nada (seria a fatura inteira).
+    const firstSync = !cfgV.data.pluggyLastSyncAt;
+    const incoming = (byMonth.get(month) ?? []).map((t) => {
+      const tx = applyCardRecurring(debts, applyMerchantRule(cfg.merchantRules, t));
+      return firstSync || cardRecurringFor(debts, t) ? tx : flagForReview(cfg.merchantRules, tx);
+    });
     for (let attempt = 0; attempt < 3; attempt++) {
       const cur = await db.getStatement(month);
       if (cur.data.snapshot) {
