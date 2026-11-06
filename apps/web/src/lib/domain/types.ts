@@ -42,6 +42,8 @@ export type CategoryId =
   | "lanches"
   | "transporte_app"
   | "combustivel"
+  | "carro"
+  | "estacionamento"
   | "moradia"
   | "saude"
   | "farmacia"

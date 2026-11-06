@@ -29,6 +29,9 @@ describe("normalize", () => {
     expect(guessCategory("Uber *Trip")).toBe("transporte_app");
     expect(guessCategory("Netflix.com")).toBe("assinaturas");
     expect(guessCategory("Pão de Açúcar")).toBe("mercado");
+    expect(guessCategory("ESTAPAR ESTACIONAMENTOS")).toBe("estacionamento");
+    expect(guessCategory("SEM PARAR")).toBe("carro");
+    expect(guessCategory("AUTO POSTO SHELL")).toBe("combustivel");
     expect(guessCategory("Loja Aleatória XPTO")).toBe("outros");
   });
   it("lê parcelas", () => {
