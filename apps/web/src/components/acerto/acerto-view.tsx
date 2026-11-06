@@ -2,12 +2,13 @@
 
 import { ArrowRight, CheckCircle2, Download, History, Info, Lock, LockOpen, Scale } from "lucide-react";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { ClosedMonth } from "@/app/api/history/route";
 import { downloadText, monthCsv } from "@/lib/client/export-csv";
 import { useDerived, useFmt } from "@/lib/client/derived";
 import { api, useStore } from "@/lib/client/store";
 import { monthLabel } from "@/lib/domain/months";
+import { fakeGlobal } from "@/lib/domain/fake";
 import type { SettlementResult, UserId } from "@/lib/domain/types";
 import { isDebtActiveIn } from "@/lib/engines/settlement";
 import { Avatar } from "../shell/avatar";
@@ -193,9 +194,21 @@ function Row({ label, value, strong, highlight }: { label: string; value: string
 
 /** Meses fechados: quem pagou quem em cada acerto. */
 function HistoryCard() {
-  const { setMonth } = useStore();
+  const { setMonth, fakeSeed } = useStore();
   const d = useDerived();
-  const [list, setList] = useState<ClosedMonth[] | null>(null);
+  const [rawList, setList] = useState<ClosedMonth[] | null>(null);
+  // Valores fictícios: o histórico vem direto do servidor, então troca os valores aqui também.
+  const list = useMemo(
+    () =>
+      rawList && fakeSeed
+        ? rawList.map((m) => ({
+            ...m,
+            grossTotal: fakeGlobal(fakeSeed, m.grossTotal),
+            transfer: m.transfer && { ...m.transfer, amount: fakeGlobal(fakeSeed, m.transfer.amount) },
+          }))
+        : rawList,
+    [rawList, fakeSeed],
+  );
   const [failed, setFailed] = useState(false);
   const fmt = useFmt(Math.max(1, ...(list ?? []).map((x) => x.grossTotal)));
   const name = (u: UserId) => d.users[u].name.split(" ")[0];

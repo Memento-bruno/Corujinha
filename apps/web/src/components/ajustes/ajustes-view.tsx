@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp, CloudCheck, ReceiptText, Target, CreditCard as CardIcon, Eye, EyeOff, Wallet, HardDrive, KeyRound, LogOut, Plus, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
+import { ArrowUp, CloudCheck, Shuffle, ReceiptText, Target, CreditCard as CardIcon, Eye, EyeOff, Wallet, HardDrive, KeyRound, LogOut, Plus, RotateCcw, ShieldCheck, Trash2, Users } from "lucide-react";
 import { useState } from "react";
 import { useDerived } from "@/lib/client/derived";
 import { api, useStore } from "@/lib/client/store";
@@ -250,7 +250,7 @@ function CardSplitSelect({ card, label }: { card: CreditCard; label: string }) {
 }
 
 export function AjustesView({ signOutAction }: { signOutAction: () => Promise<void> }) {
-  const { state, updateConfig, privacy, reload, toast } = useStore();
+  const { state, updateConfig, privacy, fake, setFake, rerollFake, reload, toast } = useStore();
   const d = useDerived();
   const cfg = d.config;
   const [newCard, setNewCard] = useState<CreditCard | null>(null);
@@ -294,7 +294,7 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
         <CardHeader icon={<IconBox><Target /></IconBox>} title="Meta do mês e tetos por setor" subtitle="Base do velocímetro, da saúde financeira e dos alertas" />
         <label className="mb-3 block">
           <Label>Meta mensal das faturas</Label>
-          <MoneyField value={cfg.monthlyGoal} disabled={privacy} onCommit={(v) => set((c) => ({ ...c, monthlyGoal: v }))} />
+          <MoneyField value={cfg.monthlyGoal} disabled={privacy || fake} onCommit={(v) => set((c) => ({ ...c, monthlyGoal: v }))} />
         </label>
         <div className="grid gap-3 sm:grid-cols-2">
           {(Object.keys(CATEGORIES) as CategoryId[])
@@ -304,7 +304,7 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
                 <Label>{CATEGORIES[k].label}</Label>
                 <MoneyField
                   value={cfg.sectorBudgets[k] ?? 0}
-                  disabled={privacy}
+                  disabled={privacy || fake}
                   onCommit={(v) =>
                     set((c) => {
                       const sectorBudgets = { ...c.sectorBudgets };
@@ -402,6 +402,23 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
           </ul>
           <ValueMode />
         </div>
+        <label className="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-zinc-50 p-3">
+          <span>
+            <span className="flex items-center gap-1.5 text-sm font-semibold">
+              <Shuffle className="size-4" /> Valores fictícios
+            </span>
+            <span className="block text-xs text-zinc-500">
+              Mesmas compras e faturas, com valores trocados. Bom para mostrar o app ou tirar print. Só muda a tela: nada é salvo, e
+              enquanto estiver ligado não dá para mudar valores.
+            </span>
+          </span>
+          <Switch checked={fake} onCheckedChange={setFake} aria-label="Valores fictícios" />
+        </label>
+        {fake && (
+          <Button variant="outline" size="sm" type="button" className="mt-2" onClick={rerollFake}>
+            <Shuffle /> Sortear outros valores
+          </Button>
+        )}
       </Card>
 
       <OpenFinanceCard config={cfg} />
