@@ -169,7 +169,9 @@ export function DebtSheet({ editing, onClose }: { editing: RecurringDebt | null;
 }
 
 function DebtForm({ initial, onSave, onDelete }: { initial: RecurringDebt; onSave: (d: RecurringDebt) => void; onDelete: () => void }) {
-  const { privacy } = useStore();
+  const { privacy: hidden, fake } = useStore();
+  // Com valores escondidos ou fictícios, o valor não pode ser editado (o da tela não é o real).
+  const privacy = hidden || fake;
   const d = useDerived();
   const [debt, setDebt] = useState(initial);
   const [amountText, setAmountText] = useState(initial.amount ? formatBRL(initial.amount) : "");
@@ -205,7 +207,7 @@ function DebtForm({ initial, onSave, onDelete }: { initial: RecurringDebt; onSav
           <Label>Valor</Label>
           {privacy ? (
             <div className="flex h-11 items-center gap-2 rounded-2xl border border-dashed border-slate-200 px-3 text-xs text-zinc-500">
-              <EyeOff className="size-4" /> Oculto no modo %
+              <EyeOff className="size-4" /> {fake ? "Valor fictício" : "Oculto no modo %"}
             </div>
           ) : (
             <Input inputMode="decimal" value={amountText} onChange={(e) => setAmountText(e.target.value)} placeholder="R$ 0,00" />
@@ -301,7 +303,11 @@ function DebtForm({ initial, onSave, onDelete }: { initial: RecurringDebt; onSav
           Salvar
         </Button>
       </div>
-      {privacy && <p className="text-center text-xs text-zinc-500">Desative o modo % para editar valores.</p>}
+      {privacy && (
+        <p className="text-center text-xs text-zinc-500">
+          {fake ? "Desligue os valores fictícios (em Ajustes) para editar valores." : "Desative o modo % para editar valores."}
+        </p>
+      )}
     </form>
   );
 }

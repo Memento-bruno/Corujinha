@@ -9,6 +9,7 @@ import type {
   UserId,
 } from "../domain/types";
 import { monthRange } from "../domain/months";
+import { changesAmounts, configChangesAmounts, fakeConfig, fakeRecurring, fakeStatement, newFakeSeed, restoreAmounts } from "../domain/fake";
 import type { ViewFilter } from "../engines/analytics";
 
 interface Versioned<T> {
@@ -60,6 +61,13 @@ interface Store {
   /** Valores em milhares com 2 casas, sem a potência (ex.: R$ 4,26 = R$ 4.260). */
   sci: boolean;
   setSci: (v: boolean) => void;
+  /** Valores fictícios: mesmas compras, valores trocados (só na tela, nunca salvo). */
+  fake: boolean;
+  setFake: (v: boolean) => void;
+  /** Semente dos valores fictícios deste aparelho (0 = desligado). */
+  fakeSeed: number;
+  /** Sorteia outros valores fictícios. */
+  rerollFake: () => void;
   view: ViewFilter;
   setView: (v: ViewFilter) => void;
   reload: () => Promise<void>;
@@ -82,6 +90,8 @@ const Ctx = createContext<Store | null>(null);
 const PRIVACY_KEY = "corujinha:privacy";
 const SCI_KEY = "corujinha:sci";
 const VIEW_KEY = "corujinha:view";
+const FAKE_KEY = "corujinha:fake";
+const FAKE_SEED_KEY = "corujinha:fake-seed";
 
 export interface BankSyncSummary {
   added: number;
@@ -200,6 +210,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [month, setMonthState] = useState<MonthKey | null>(null);
   const [privacy, setPrivacyState] = useState(false);
   const [sci, setSciState] = useState(false);
+  const [fake, setFakeState] = useState(false);
+  const [seed, setSeed] = useState(0);
+  const fakeRef = useRef(false);
+  const seedRef = useRef(0);
+  seedRef.current = seed;
   const [view, setViewState] = useState<ViewFilter>("COUPLE");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [bankSyncing, setBankSyncing] = useState(false);
@@ -227,6 +242,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       setPrivacyState(localStorage.getItem(PRIVACY_KEY) === "1");
       setSciState(localStorage.getItem(SCI_KEY) === "1");
+      let sd = Number(localStorage.getItem(FAKE_SEED_KEY));
+      if (!Number.isInteger(sd) || sd <= 0) {
+        sd = newFakeSeed();
+        localStorage.setItem(FAKE_SEED_KEY, String(sd));
+      }
+      setSeed(sd);
+      const f = localStorage.getItem(FAKE_KEY) === "1";
+      fakeRef.current = f;
+      setFakeState(f);
       const v = localStorage.getItem(VIEW_KEY);
       if (v === "USER_A" || v === "USER_B" || v === "COUPLE") setViewState(v);
     } catch {
@@ -248,6 +272,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSciState(v);
     try {
       localStorage.setItem(SCI_KEY, v ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const setFake = useCallback((v: boolean) => {
+    fakeRef.current = v;
+    setFakeState(v);
+    setSeed((cur) => cur || newFakeSeed());
+    try {
+      localStorage.setItem(FAKE_KEY, v ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const rerollFake = useCallback(() => {
+    const sd = newFakeSeed();
+    setSeed(sd);
+    try {
+      localStorage.setItem(FAKE_SEED_KEY, String(sd));
     } catch {
       /* ignore */
     }
@@ -441,20 +486,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [enqueue, flush, commit],
   );
 
-  const updateStatement = useCallback(
-    async (m: MonthKey, fn: (s: StatementFile) => StatementFile) => {
-      await save(statementSlot(m), fn);
+  /**
+   * Com os valores fictícios ligados, recusa a gravação que mudaria algum valor: o que está
+   * na tela não é o valor real, e salvar isso estragaria os dados do Drive.
+   */
+  const blockedByFake = useCallback(
+    <T,>(slot: Slot<T>, fn: (d: T) => T, changes: (a: T, b: T) => boolean): boolean => {
+      if (!fakeRef.current) return false;
+      const cur = slot.get(stateRef.current);
+      if (!cur || !changes(cur.data, fn(cur.data))) return false;
+      toast("Valores fictícios ligados: desligue em Ajustes para mudar valores.", "error");
+      return true;
     },
-    [save],
+    [toast],
   );
 
-  const updateConfig = useCallback((fn: (c: HouseholdConfig) => HouseholdConfig) => save(configSlot, fn), [save]);
+  const updateStatement = useCallback(
+    async (m: MonthKey, fn: (s: StatementFile) => StatementFile) => {
+      const slot = statementSlot(m);
+      const safe = (s: StatementFile) => {
+        const next = fn(s);
+        return fakeRef.current ? { ...next, transactions: restoreAmounts(seedRef.current, s.transactions, next.transactions) } : next;
+      };
+      if (blockedByFake(slot, safe, (a, b) => changesAmounts(a.transactions, b.transactions))) return;
+      await save(slot, safe);
+    },
+    [save, blockedByFake],
+  );
+
+  const updateConfig = useCallback(
+    async (fn: (c: HouseholdConfig) => HouseholdConfig) => {
+      if (blockedByFake(configSlot, fn, configChangesAmounts)) return false;
+      return save(configSlot, fn);
+    },
+    [save, blockedByFake],
+  );
 
   const updateRecurring = useCallback(
     async (fn: (r: RecurringDebtsFile) => RecurringDebtsFile) => {
-      await save(recurringSlot, fn);
+      const safe = (r: RecurringDebtsFile) => {
+        const next = fn(r);
+        return fakeRef.current ? { ...next, debts: restoreAmounts(seedRef.current, r.debts, next.debts) } : next;
+      };
+      if (blockedByFake(recurringSlot, safe, (a, b) => changesAmounts(a.debts, b.debts))) return;
+      await save(recurringSlot, safe);
     },
-    [save],
+    [save, blockedByFake],
   );
 
   const closeMonth = useCallback(
@@ -588,9 +665,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void syncBank({ silent: true }).finally(() => setFirstSync(false));
   }, [state, syncBank]);
 
+  // O que as telas veem: com os valores fictícios ligados, uma cópia com os valores trocados.
+  // As gravações continuam partindo dos dados reais (stateRef).
+  const shown = useMemo<AppState | null>(() => {
+    if (!state || !fake || !seed) return state;
+    return {
+      ...state,
+      config: { ...state.config, data: fakeConfig(seed, state.config.data) },
+      recurring: { ...state.recurring, data: fakeRecurring(seed, state.recurring.data) },
+      statements: Object.fromEntries(Object.entries(state.statements).map(([m, s]) => [m, { ...s, data: fakeStatement(seed, s.data) }])),
+    };
+  }, [state, fake, seed]);
+
   const value = useMemo<Store>(
     () => ({
-      state,
+      state: shown,
       error,
       errorCode,
       sync,
@@ -600,6 +689,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setPrivacy,
       sci,
       setSci,
+      fake,
+      setFake,
+      fakeSeed: fake ? seed : 0,
+      rerollFake,
       view,
       setView,
       reload,
@@ -613,7 +706,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toasts,
       toast,
     }),
-    [state, error, errorCode, sync, month, setMonth, privacy, setPrivacy, sci, setSci, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, syncBank, bankSyncing, firstSync, toasts, toast],
+    [shown, error, errorCode, sync, month, setMonth, privacy, setPrivacy, sci, setSci, fake, setFake, seed, rerollFake, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, syncBank, bankSyncing, firstSync, toasts, toast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
