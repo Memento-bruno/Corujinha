@@ -47,6 +47,7 @@ export async function POST(req: Request) {
           split: isSharedSplit(rule?.split) ? rule!.split! : ownerSplit(card.owner),
           installment: row.installment,
           source: body.source,
+          ...(rule ? {} : { toReview: true }),
         });
       }
       try {

@@ -24,6 +24,8 @@ export interface AppState {
     authConfigured: boolean;
     driveConfigured: boolean;
     pluggyConfigured: boolean;
+    /** Lembretes por e-mail ligados no servidor (CRON_SECRET + RESEND_API_KEY). */
+    remindersConfigured?: boolean;
     /** Chaves da Pluggy existem, mas o app está público sem login: bloqueado. */
     pluggyNeedsLogin?: boolean;
   };
@@ -48,6 +50,8 @@ interface Toast {
 interface Store {
   state: AppState | null;
   error: string | null;
+  /** Código do erro ao carregar (ex.: DRIVE_AUTH = conexão com o Drive venceu). */
+  errorCode: string | null;
   sync: SyncStatus;
   month: MonthKey | null;
   setMonth: (m: MonthKey) => void;
@@ -94,9 +98,35 @@ class HttpError extends Error {
   constructor(
     public status: number,
     message: string,
+    public code?: string,
   ) {
     super(message);
   }
+}
+
+/** Falha passageira (sem sinal, servidor fora do ar por um instante): vale tentar de novo. */
+function isTransient(e: unknown): boolean {
+  if (!(e instanceof HttpError)) return true; // fetch nem chegou ao servidor
+  if (e.code === "DRIVE_AUTH" || e.code === "DRIVE_MISSING") return false;
+  return e.status === 502 || e.status === 503 || e.status === 504;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** JSON com as chaves em ordem e sem os campos que o servidor preenche sozinho, para comparar versões. */
+function comparable(data: unknown): string {
+  const strip = (v: unknown, top: boolean): unknown => {
+    if (Array.isArray(v)) return v.map((x) => strip(x, false));
+    if (!v || typeof v !== "object") return v;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(v).sort()) {
+      const x = (v as Record<string, unknown>)[k];
+      if (x === undefined || (top && k === "updatedAt") || k === "email") continue;
+      out[k] = strip(x, false);
+    }
+    return out;
+  };
+  return JSON.stringify(strip(data, true));
 }
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
@@ -109,7 +139,7 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     // Em "Dados inválidos", diz qual campo foi recusado, para dar para descobrir a causa.
     const field = Array.isArray(body.issues) ? body.issues[0]?.path?.filter((p: unknown) => typeof p === "string").join(".") : "";
-    throw new HttpError(res.status, (body.error ?? `Erro ${res.status}`) + (field ? ` (${field})` : ""));
+    throw new HttpError(res.status, (body.error ?? `Erro ${res.status}`) + (field ? ` (${field})` : ""), typeof body.code === "string" ? body.code : undefined);
   }
   return body as T;
 }
@@ -118,6 +148,8 @@ export { api };
 
 /** Quantas vezes juntar a edição com uma versão mais nova antes de desistir. */
 const MAX_MERGE_ATTEMPTS = 4;
+/** Quantas vezes tentar de novo quando a internet falha, antes de desistir da edição. */
+const MAX_NETWORK_RETRIES = 3;
 /** De quanto em quanto tempo procurar mudanças feitas em outro aparelho. */
 const REFRESH_EVERY_MS = 15_000;
 
@@ -155,6 +187,7 @@ function statementSlot(m: MonthKey): Slot<StatementFile> {
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [sync, setSync] = useState<SyncStatus>("loading");
   const [month, setMonthState] = useState<MonthKey | null>(null);
   const [privacy, setPrivacyState] = useState(false);
@@ -230,6 +263,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       commit((prev) => (prev && keep ? { ...s, statements: { ...prev.statements, ...s.statements } } : s));
       setMonthState(s.month);
       setError(null);
+      setErrorCode(null);
       setSync("synced");
     } catch (e) {
       if (e instanceof HttpError && e.status === 401) {
@@ -237,6 +271,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
       setError((e as Error).message);
+      setErrorCode(e instanceof HttpError ? (e.code ?? null) : null);
       setSync("error");
     }
   }, [commit]);
@@ -297,6 +332,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         let base = slot.get(stateRef.current);
         if (!base) return false;
         setSync("saving");
+        let networkRetries = 0;
         for (let attempt = 0; ; attempt++) {
           const next = fn(base.data);
           const etag = base.etag;
@@ -307,6 +343,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setSync("synced");
             return true;
           } catch (e) {
+            // Sinal ruim: espera um pouco e tenta de novo em vez de desfazer a edição.
+            if (isTransient(e) && networkRetries < MAX_NETWORK_RETRIES) {
+              networkRetries++;
+              if (networkRetries === 1) toast("Sinal fraco: tentando salvar de novo…", "info");
+              await sleep(1500 * 2 ** (networkRetries - 1));
+              try {
+                // A gravação pode ter chegado ao Drive mesmo sem a resposta voltar.
+                const fresh = await api<Versioned<T>>(slot.url);
+                if (fresh.etag !== etag) {
+                  if (comparable(fresh.data) === comparable(next)) {
+                    commit((s) => (s ? slot.set(s, fresh) : s));
+                    setSync("synced");
+                    return true;
+                  }
+                  base = fresh; // outro aparelho gravou no meio: junta a edição com a versão dele
+                }
+              } catch {
+                /* ainda sem conexão: tenta gravar de novo assim mesmo */
+              }
+              continue;
+            }
             if (e instanceof HttpError && e.status === 409 && attempt < MAX_MERGE_ATTEMPTS) {
               try {
                 base = await api<Versioned<T>>(slot.url);
@@ -321,7 +378,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         }
       }),
-    [enqueue, handleError, commit],
+    [enqueue, handleError, commit, toast],
   );
 
   const updateStatement = useCallback(
@@ -470,6 +527,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       error,
+      errorCode,
       sync,
       month,
       setMonth,
@@ -490,7 +548,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toasts,
       toast,
     }),
-    [state, error, sync, month, setMonth, privacy, setPrivacy, sci, setSci, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, syncBank, bankSyncing, firstSync, toasts, toast],
+    [state, error, errorCode, sync, month, setMonth, privacy, setPrivacy, sci, setSci, view, reload, updateStatement, updateConfig, updateRecurring, closeMonth, syncBank, bankSyncing, firstSync, toasts, toast],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

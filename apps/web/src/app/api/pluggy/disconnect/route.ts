@@ -13,6 +13,8 @@ export async function POST(req: Request) {
     await requireViewer();
     const { itemId } = z.object({ itemId: z.string().regex(/^[0-9a-f-]{36}$/i) }).parse(await req.json());
     const db = await getDatabase();
+    // Cópia de tudo antes de apagar em massa (dá para voltar em Ajustes → Segurança).
+    await db.backup("antes-de-desconectar-banco");
     return disconnectPluggyItem(db, itemId.toLowerCase());
   });
 }

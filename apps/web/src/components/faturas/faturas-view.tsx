@@ -9,6 +9,7 @@ import { useDragScroll } from "@/lib/client/use-drag-scroll";
 import { useReveal } from "@/lib/client/use-reveal";
 import { addMonths, monthName } from "@/lib/domain/months";
 import type { RecurringDebt, Transaction } from "@/lib/domain/types";
+import { cardGroups, rootCardId } from "@/lib/domain/card-groups";
 import { sumCents } from "@/lib/engines/analytics";
 import { cn } from "@/lib/utils";
 import { PERSON } from "../home/colors";
@@ -60,14 +61,16 @@ export function FaturasView() {
 
   // Cartões, do que mais gastou para o que menos gastou (na visão escolhida).
   const cards = useMemo(() => {
-    const list = d.config.cards
+    // Virtuais e adicionais entram no cartão principal (é a mesma fatura).
+    const list = cardGroups(d.config.cards)
+      .map((g) => g.card)
       .filter((c) => view === "COUPLE" || c.owner === view)
-      .map((c) => ({ c, total: sumCents(d.txs.filter((t) => t.cardId === c.id)) }))
+      .map((c) => ({ c, total: sumCents(d.txs.filter((t) => rootCardId(t.cardId, d.config.cards) === c.id)) }))
       .sort((a, b) => b.total - a.total);
     return list;
   }, [d.config.cards, d.txs, view]);
   const cardsSum = Math.max(1, cards.reduce((s, x) => s + Math.max(0, x.total), 0));
-  const usedCards = new Set(real.map((t) => t.cardId)).size;
+  const usedCards = new Set(real.map((t) => rootCardId(t.cardId, d.config.cards))).size;
 
   // Como as compras estão divididas (por valor).
   const division = useMemo(() => {
@@ -91,7 +94,7 @@ export function FaturasView() {
   const lastSync = ago(d.config.pluggyLastSyncAt);
 
   const pickCard = (id: string) => setCardId((c) => (c === id ? null : id));
-  const txs: Transaction[] = cardId ? d.txs.filter((t) => t.cardId === cardId) : d.txs;
+  const txs: Transaction[] = cardId ? d.txs.filter((t) => rootCardId(t.cardId, d.config.cards) === cardId) : d.txs;
 
   return (
     <div className="space-y-4">

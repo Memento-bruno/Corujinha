@@ -1,12 +1,15 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, Info, Lock, LockOpen, Scale } from "lucide-react";
+import { ArrowRight, CheckCircle2, Download, History, Info, Lock, LockOpen, Scale } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import type { ClosedMonth } from "@/app/api/history/route";
+import { downloadText, monthCsv } from "@/lib/client/export-csv";
 import { useDerived, useFmt } from "@/lib/client/derived";
-import { useStore } from "@/lib/client/store";
+import { api, useStore } from "@/lib/client/store";
 import { monthLabel } from "@/lib/domain/months";
 import type { SettlementResult, UserId } from "@/lib/domain/types";
+import { isDebtActiveIn } from "@/lib/engines/settlement";
 import { Avatar } from "../shell/avatar";
 import { Button } from "../ui/button";
 import { Card, CardHeader } from "../ui/card";
@@ -16,7 +19,7 @@ import { Sheet } from "../ui/sheet";
 const DATE = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" });
 
 export function AcertoView() {
-  const { closeMonth } = useStore();
+  const { state, closeMonth } = useStore();
   const d = useDerived();
   const [confirm, setConfirm] = useState(false);
   // No snapshot, mostramos os números gravados no fechamento
@@ -60,6 +63,16 @@ export function AcertoView() {
               </p>
             )}
             <div className="mt-5 flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size={d.snapshot ? "sm" : "lg"}
+                onClick={() => {
+                  const debts = state!.recurring.data.debts.filter((x) => x.kind !== "CARTAO" && isDebtActiveIn(x, d.month));
+                  downloadText(`corujinha-${d.month}.csv`, monthCsv(d.month, d.allTxs, debts, d.config));
+                }}
+              >
+                <Download /> Exportar planilha
+              </Button>
               {d.snapshot ? (
                 <>
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
@@ -132,6 +145,8 @@ export function AcertoView() {
         </Step>
       </Card>
 
+      <HistoryCard />
+
       <Sheet open={confirm} onOpenChange={setConfirm} title={`Fechar ${monthLabel(d.month)}?`} description="Salva um snapshot do acerto no Google Drive e trava as transações do mês. Dá para reabrir depois.">
         <div className="flex gap-2">
           <Button variant="outline" className="flex-1" onClick={() => setConfirm(false)}>
@@ -173,5 +188,62 @@ function Row({ label, value, strong, highlight }: { label: string; value: string
       <span className={highlight ? "font-semibold" : strong ? "font-semibold text-zinc-800" : "text-zinc-500"}>{label}</span>
       <span className={"tabular shrink-0 " + (strong || highlight ? "font-bold" : "font-semibold text-zinc-800")}>{value}</span>
     </div>
+  );
+}
+
+/** Meses fechados: quem pagou quem em cada acerto. */
+function HistoryCard() {
+  const { setMonth } = useStore();
+  const d = useDerived();
+  const [list, setList] = useState<ClosedMonth[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const fmt = useFmt(Math.max(1, ...(list ?? []).map((x) => x.grossTotal)));
+  const name = (u: UserId) => d.users[u].name.split(" ")[0];
+  const closedNow = Boolean(d.snapshot);
+  useEffect(() => {
+    let alive = true;
+    api<{ months: ClosedMonth[] }>("/api/history")
+      .then((r) => alive && setList(r.months))
+      .catch(() => alive && setFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [closedNow]);
+  return (
+    <Card>
+      <CardHeader icon={<IconBox><History /></IconBox>} title="Meses fechados" subtitle="Quem pagou quem em cada acerto" />
+      {failed ? (
+        <p className="text-sm text-zinc-500">Não consegui carregar o histórico agora.</p>
+      ) : list === null ? (
+        <p className="text-sm text-zinc-500">Carregando…</p>
+      ) : list.length === 0 ? (
+        <p className="text-sm text-zinc-500">Nenhum mês fechado ainda. Quando fecharem um mês, ele aparece aqui.</p>
+      ) : (
+        <ul className="divide-y divide-zinc-100">
+          {list.map((m) => (
+            <li key={m.month}>
+              <button type="button" onClick={() => setMonth(m.month)} className="flex w-full items-center justify-between gap-3 py-2.5 text-left text-sm">
+                <span>
+                  <b className="text-zinc-900">{monthLabel(m.month)}</b>
+                  <span className="block text-xs text-zinc-500">
+                    Fechado em {DATE.format(new Date(m.closedAt))} por {name(m.closedBy)}
+                  </span>
+                </span>
+                <span className="text-right text-zinc-700">
+                  {m.transfer ? (
+                    <>
+                      {name(m.transfer.from)} → {name(m.transfer.to)}
+                      <b className="tabular block text-zinc-900">{fmt.money(m.transfer.amount, m.grossTotal)}</b>
+                    </>
+                  ) : (
+                    "Ninguém devia nada"
+                  )}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }

@@ -49,3 +49,16 @@ Com o webhook, a Pluggy avisa o app quando chegam compras novas.
 
 O webhook só dispara a mesma leitura do botão Sincronizar, e só para conexões cadastradas no app.
 Sem o `?token=` correto, a chamada é recusada.
+
+## 8. (Opcional) Lembrete de vencimento por e-mail
+Todo dia às 8h (horário de Brasília) o app manda um e-mail para cada um com as contas e faturas **dele**
+que vencem hoje ou daqui a 3 dias e ainda não foram marcadas com **Já paguei**. O e-mail não mostra valores.
+
+1. Crie uma conta grátis em [resend.com](https://resend.com) (até 3.000 e-mails por mês) e gere uma **API Key**.
+2. Na Vercel, adicione:
+   - `RESEND_API_KEY` = a chave do passo 1
+   - `CRON_SECRET` = um segredo aleatório (ex.: `openssl rand -hex 24`). A Vercel manda ele sozinha ao chamar a tarefa.
+   - (Opcional) `REMINDER_FROM` = remetente de um domínio verificado na Resend, ex.: `Corujinha <lembrete@seudominio.com>`.
+     Sem domínio próprio, a Resend só entrega para o e-mail dono da conta Resend.
+3. Faça **Redeploy**. A tarefa agendada já está no `vercel.json` (`/api/cron/lembretes`, 11:00 UTC).
+4. Cada um pode desligar o próprio lembrete em **Configurações → Contas e vencimentos**.

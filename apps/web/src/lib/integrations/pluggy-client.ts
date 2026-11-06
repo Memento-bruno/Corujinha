@@ -69,8 +69,12 @@ export async function getBills(accountId: string): Promise<PluggyBill[]> {
   try {
     const r = await get<{ results: PluggyBill[] }>("/bills", { accountId });
     return r.results ?? [];
-  } catch {
-    return []; // nem toda instituição informa faturas; usamos a data da compra
+  } catch (e) {
+    // Instituição que não informa faturas: usamos a data da compra.
+    if (e instanceof PluggyError && (e.status === 400 || e.status === 404)) return [];
+    // Falha passageira (rede, Pluggy fora do ar): sem as faturas as compras cairiam no mês errado,
+    // então esse cartão fica de fora desta sincronização e nada dele é alterado.
+    throw e;
   }
 }
 

@@ -64,6 +64,18 @@ export const env = {
   get pluggyWebhookSecret() {
     return v("PLUGGY_WEBHOOK_SECRET");
   },
+  /** Chave da Resend (resend.com) para os lembretes por e-mail. Sem ela, os lembretes ficam desligados. */
+  get resendApiKey() {
+    return v("RESEND_API_KEY");
+  },
+  /** Remetente dos lembretes (precisa ser de um domínio verificado na Resend, ou onboarding@resend.dev para testar). */
+  get reminderFrom() {
+    return v("REMINDER_FROM") ?? "Corujinha <onboarding@resend.dev>";
+  },
+  /** Segredo que a Vercel manda no cabeçalho Authorization das tarefas agendadas (cron). */
+  get cronSecret() {
+    return v("CRON_SECRET");
+  },
   get appUrl() {
     return v("AUTH_URL") ?? "http://localhost:3000";
   },
@@ -79,6 +91,27 @@ export function isDriveConfigured(): boolean {
     return Boolean(env.serviceAccountEmail && env.serviceAccountPrivateKey);
   }
   return Boolean(env.driveRefreshToken && env.googleClientId && env.googleClientSecret);
+}
+
+/** Variáveis do Drive que estão faltando (nomes, nunca valores). */
+export function driveMissingVars(): string[] {
+  const missing: string[] = [];
+  if (!env.driveFolderId) missing.push("GOOGLE_DRIVE_FOLDER_ID");
+  if (env.driveAuthMode === "service_account") {
+    if (!env.serviceAccountEmail) missing.push("GOOGLE_SERVICE_ACCOUNT_EMAIL");
+    if (!env.serviceAccountPrivateKey) missing.push("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY");
+  } else if (!env.driveRefreshToken) missing.push("GOOGLE_DRIVE_REFRESH_TOKEN");
+  if (!env.encryptionSecret) missing.push("ENCRYPTION_SECRET");
+  return missing;
+}
+
+/**
+ * Publicado (Vercel) com login, mas sem Drive: o único lugar para gravar seria o disco temporário
+ * da Vercel, que some sozinho e é diferente em cada servidor. Nesse caso o app não abre os dados.
+ * Para testar sem Drive no PC, nada muda.
+ */
+export function isStorageBlocked(): boolean {
+  return Boolean(process.env.VERCEL) && isAuthConfigured() && driveMissingVars().length > 0 && !v("ALLOW_TEMPORARY_STORAGE");
 }
 
 export type StorageMode = "drive" | "local";

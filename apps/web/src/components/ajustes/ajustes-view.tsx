@@ -6,13 +6,16 @@ import { useDerived } from "@/lib/client/derived";
 import { api, useStore } from "@/lib/client/store";
 import { CATEGORIES } from "@/lib/domain/categories";
 import { formatBRL, parseMoneyToCents } from "@/lib/domain/money";
-import type { CardBrand, CategoryId, CreditCard, HouseholdConfig, UserId } from "@/lib/domain/types";
+import { cardGroups } from "@/lib/domain/card-groups";
+import type { CardBrand, CategoryId, CreditCard, HouseholdConfig, Split, UserId } from "@/lib/domain/types";
 import { CreditCardVisual } from "../home/credit-card";
 import { Button } from "../ui/button";
 import { Card, CardHeader } from "../ui/card";
 import { Input, Label, Select } from "../ui/field";
 import { IconBox } from "../ui/icon-box";
 import { Sheet } from "../ui/sheet";
+import { BackupsCard } from "./backups-card";
+import { Switch } from "../ui/switch";
 import { MerchantsCard } from "./merchants-card";
 import { OpenFinanceCard } from "./open-finance-card";
 import { SubscriptionsCard } from "./subscriptions-card";
@@ -76,6 +79,27 @@ function IncomeCard({ cfg, me, set }: { cfg: HouseholdConfig; me: UserId; set: (
       </div>
       <p className="mt-2 text-[11px] text-zinc-500">Cada um só consegue mudar o próprio salário.</p>
     </Card>
+  );
+}
+
+/** Lembrete por e-mail 3 dias antes e no dia do vencimento (cada um liga o seu). */
+function ReminderToggle({ cfg, me, on, set }: { cfg: HouseholdConfig; me: UserId; on: boolean; set: (fn: (c: HouseholdConfig) => HouseholdConfig) => void }) {
+  const mine = cfg.reminderEmails?.[me] !== false;
+  return (
+    <div className="mb-4 rounded-2xl bg-zinc-50 p-3">
+      <label className="flex items-center justify-between gap-3">
+        <span>
+          <span className="block text-sm font-semibold">Lembrete por e-mail</span>
+          <span className="block text-xs text-zinc-500">3 dias antes e no dia, só das contas e faturas que são suas. O e-mail não mostra valores.</span>
+        </span>
+        <Switch
+          checked={on && mine}
+          disabled={!on}
+          onCheckedChange={(v) => set((c) => ({ ...c, reminderEmails: { ...c.reminderEmails, [me]: v } }))}
+        />
+      </label>
+      {!on && <p className="mt-2 text-xs text-amber-700">Ainda desligado no servidor: falta configurar o envio de e-mail (veja o DEPLOY.md, passo 8).</p>}
+    </div>
   );
 }
 
@@ -161,6 +185,52 @@ function MoneyField({ value, onCommit, disabled }: { value: number; onCommit: (c
         } else setText(formatBRL(value));
       }}
     />
+  );
+}
+
+/** De quem são as compras de um cartão (ex.: adicional que só um dos dois usa). */
+function CardSplitSelect({ card, label }: { card: CreditCard; label: string }) {
+  const { state, updateConfig, updateStatement, toast } = useStore();
+  const cfg = state!.config.data;
+  const first = (u: UserId) => cfg.users[u].name.split(" ")[0];
+  const value = card.defaultSplit?.type === "INDIVIDUAL_A" ? "A" : card.defaultSplit?.type === "INDIVIDUAL_B" ? "B" : "";
+  const change = async (v: string) => {
+    const split: Split | undefined = v === "A" ? { type: "INDIVIDUAL_A" } : v === "B" ? { type: "INDIVIDUAL_B" } : undefined;
+    const before = card.defaultSplit ?? { type: "SHARED_DEFAULT" };
+    const ok = await updateConfig((c) => ({
+      ...c,
+      cards: c.cards.map((x) => {
+        if (x.id !== card.id) return x;
+        const { defaultSplit: _old, ...rest } = x;
+        void _old;
+        return split ? { ...rest, defaultSplit: split } : rest;
+      }),
+    }));
+    if (!ok) return;
+    // Compras deste cartão nos meses ainda abertos que estavam com a divisão antiga do cartão passam para a nova.
+    const after = split ?? { type: "SHARED_DEFAULT" as const };
+    let changed = 0;
+    for (const [m, f] of Object.entries(state!.statements)) {
+      if (f.data.snapshot) continue;
+      const hits = f.data.transactions.filter((t) => t.cardId === card.id && t.split.type === before.type).length;
+      if (!hits) continue;
+      changed += hits;
+      await updateStatement(m, (s) => ({
+        ...s,
+        transactions: s.transactions.map((t) => (t.cardId === card.id && t.split.type === before.type ? { ...t, split: after } : t)),
+      }));
+    }
+    toast(changed ? `Salvo. Mudei ${changed} compra${changed === 1 ? "" : "s"} deste cartão nos meses abertos.` : "Salvo.", "success");
+  };
+  return (
+    <label className="mt-1.5 block px-1">
+      <span className="text-[11px] font-semibold text-zinc-500">{label}</span>
+      <Select className="h-9 text-xs" value={value} onChange={(e) => void change(e.target.value)}>
+        <option value="">Divisão padrão do casal</option>
+        <option value="A">Só de {first("USER_A")}</option>
+        <option value="B">Só de {first("USER_B")}</option>
+      </Select>
+    </label>
   );
 }
 
@@ -267,10 +337,17 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
             </Button>
           }
         />
+        <p className="mb-3 text-xs text-zinc-500">
+          Cartões virtuais e adicionais ficam junto do cartão principal, porque caem na mesma fatura. Em cada um dá para dizer de quem são as compras.
+        </p>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {cfg.cards.map((c) => (
+          {cardGroups(cfg.cards).map(({ card: c, children }) => (
             <div key={c.id} className="min-w-0">
               <CreditCardVisual compact card={c} ownerName={cfg.users[c.owner].name} />
+              <CardSplitSelect card={c} label="Compras deste cartão" />
+              {children.map((v) => (
+                <CardSplitSelect key={v.id} card={v} label={`Final ${v.last4}`} />
+              ))}
               <button
                 className="mt-1.5 inline-flex items-center gap-1 px-1 text-xs font-semibold text-rose-600"
                 onClick={() => {
@@ -290,6 +367,7 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
 
       <Card id="contas">
         <CardHeader icon={<IconBox><ReceiptText /></IconBox>} title="Contas fixas, boletos e vencimentos" subtitle="Aluguel, condomínio, água, internet, parcela do carro e compras do cartão que se repetem" />
+        <ReminderToggle cfg={cfg} me={state!.viewer.userId} on={Boolean(mode.remindersConfigured)} set={set} />
         <RecurringTab />
       </Card>
 
@@ -311,6 +389,8 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
 
       <OpenFinanceCard config={cfg} />
 
+      {mode.storage === "drive" && <BackupsCard />}
+
       <Card id="seguranca">
         <CardHeader icon={<IconBox>{mode.storage === "drive" ? <CloudCheck /> : <HardDrive />}</IconBox>} title="Armazenamento e segurança" />
         <ul className="space-y-2 text-sm">
@@ -320,9 +400,14 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
           <li className="flex justify-between gap-3"><span className="text-zinc-500">Drive configurado</span><b>{mode.driveConfigured ? "Sim" : "Não"}</b></li>
         </ul>
         <div className="mt-4 flex flex-wrap gap-2">
-          {mode.authConfigured && !mode.driveConfigured && (
+          {mode.authConfigured && (
             <Button variant="outline" size="sm" asChild>
-              <a href="/api/drive/connect"><KeyRound /> Gerar refresh token do Drive</a>
+              <a href="/api/drive/connect"><KeyRound /> {mode.driveConfigured ? "Renovar conexão com o Drive" : "Gerar refresh token do Drive"}</a>
+            </Button>
+          )}
+          {mode.authConfigured && (
+            <Button variant="ghost" size="sm" asChild>
+              <a href="/api/drive/connect?acesso=restrito"><ShieldCheck /> Testar acesso menor ao Drive</a>
             </Button>
           )}
           {mode.storage === "local" && (

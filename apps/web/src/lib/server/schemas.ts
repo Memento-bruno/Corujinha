@@ -32,6 +32,17 @@ export const transactionSchema = z.object({
   source: z.enum(["demo", "csv", "ofx", "pdf", "pluggy", "manual"]),
   externalId: z.string().max(120).optional(),
   pluggyItemId: z.string().max(64).optional(),
+  toReview: z.boolean().optional(),
+  question: z
+    .object({
+      by: userId,
+      text: z.string().trim().min(1).max(280),
+      at: z.string().max(40),
+      answer: z.string().trim().min(1).max(280).optional(),
+      answeredBy: userId.optional(),
+      answeredAt: z.string().max(40).optional(),
+    })
+    .optional(),
 });
 
 export const statementSchema = z.object({
@@ -40,7 +51,12 @@ export const statementSchema = z.object({
   transactions: z.array(transactionSchema).max(5000),
   snapshot: z.any().optional(),
   bankBills: z
-    .record(z.string().max(80), z.object({ total: z.number().int(), paid: z.number().int(), status: z.enum(["paga", "parcial", "em aberto"]) }))
+    .record(z.string().max(80), z.object({
+        total: z.number().int(),
+        paid: z.number().int(),
+        status: z.enum(["paga", "parcial", "em aberto"]),
+        dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      }))
     .optional(),
   updatedAt: z.string(),
 });
@@ -64,6 +80,7 @@ export const recurringSchema = z.object({
         active: z.boolean(),
         cardId: z.string().min(1).max(80).optional(),
         merchantKey: z.string().max(80).optional(),
+        paidMonths: z.array(month).max(240).optional(),
       }),
     )
     .max(500),
@@ -72,8 +89,8 @@ export const recurringSchema = z.object({
 export const configSchema = z.object({
   schemaVersion: z.literal(1),
   users: z.object({
-    USER_A: z.object({ id: z.literal("USER_A"), name: shortText, email: z.string().optional(), avatarColor: z.string().max(20) }),
-    USER_B: z.object({ id: z.literal("USER_B"), name: shortText, email: z.string().optional(), avatarColor: z.string().max(20) }),
+    USER_A: z.object({ id: z.literal("USER_A"), name: shortText, email: z.string().optional(), avatarColor: z.string().max(20), onboardedAt: z.string().max(40).optional() }),
+    USER_B: z.object({ id: z.literal("USER_B"), name: shortText, email: z.string().optional(), avatarColor: z.string().max(20), onboardedAt: z.string().max(40).optional() }),
   }),
   cards: z
     .array(
@@ -85,6 +102,8 @@ export const configSchema = z.object({
         last4: z.string().regex(/^\d{4}$/, "Informe apenas os 4 últimos dígitos."),
         brand: z.enum(["visa", "mastercard", "elo", "amex", "hipercard", "outra"]),
         theme: z.number().int().min(0).max(3),
+        parentId: z.string().min(1).max(80).optional(),
+        defaultSplit: splitSchema.optional(),
       }),
     )
     // Folga para cartões virtuais e adicionais criados pela sincronização do banco.
@@ -110,6 +129,8 @@ export const configSchema = z.object({
     .max(10)
     .optional(),
   pluggyLastSyncAt: z.string().optional(),
+  paidCardBills: z.array(z.string().max(100)).max(1000).optional(),
+  reminderEmails: z.partialRecord(userId, z.boolean()).optional(),
   ownerPaysCardsAt: z.string().max(40).optional(),
   updatedAt: z.string(),
 });

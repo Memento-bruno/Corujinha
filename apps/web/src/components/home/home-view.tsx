@@ -7,12 +7,14 @@ import { CompositionChart } from "./composition-chart";
 import { DueDates } from "./due-dates";
 import { EvolutionChart } from "./evolution-chart";
 import { HealthCard } from "./health-card";
+import { InboxCard } from "./inbox-card";
 import { SpendHero } from "./spend-hero";
 
 export function HomeView() {
   return (
     <div className="flex flex-col gap-5">
       <DueDates />
+      <InboxCard />
       <SpendHero />
       <div className="flex flex-wrap gap-5">
         <EvolutionChart />

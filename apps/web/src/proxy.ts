@@ -16,6 +16,8 @@ export default auth((req) => {
     pathname.startsWith("/api/auth") ||
     // Chamado pelos servidores da Pluggy; protegido por segredo próprio na URL.
     pathname === "/api/webhooks/pluggy" ||
+    // Tarefa agendada da Vercel; protegida pelo CRON_SECRET no cabeçalho.
+    pathname === "/api/cron/lembretes" ||
     pathname === "/manifest.webmanifest" ||
     pathname === "/sw.js";
   if (isPublic) return NextResponse.next();
