@@ -8,6 +8,7 @@ import { CATEGORIES, CATEGORY_IDS } from "@/lib/domain/categories";
 import type { CategoryId, RecurringDebt, Split, Transaction } from "@/lib/domain/types";
 import { SUBSCRIPTION_TAG, isSubscription } from "@/lib/engines/analytics";
 import { learnMerchant, propagateToSameMerchant } from "@/lib/engines/merchants";
+import { isSamePurchase } from "@/lib/engines/installments";
 import { cardRecurringFor } from "@/lib/engines/recurring";
 import { cn } from "@/lib/utils";
 import { PERSON } from "../home/colors";
@@ -143,6 +144,21 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
         return { ...s, transactions: propagateToSameMerchant(s.transactions, prev, after).transactions };
       });
       if (cardRecurringFor(debts, after)) syncRecurring(after, true);
+      // Compra parcelada: a mudança vale para as parcelas dos outros meses ainda abertos.
+      if ((learned.category || learned.split) && after.installment && after.installment.total > 1) {
+        for (const [m, f] of Object.entries(state!.statements)) {
+          if (m === d.month || f.data.snapshot) continue;
+          if (!f.data.transactions.some((t) => isSamePurchase(d.month, after, m, t))) continue;
+          void updateStatement(m, (s) => ({
+            ...s,
+            transactions: s.transactions.map((t) =>
+              isSamePurchase(d.month, after, m, t)
+                ? { ...t, ...(learned.category ? { category: after.category } : {}), ...(learned.split ? { split: after.split } : {}) }
+                : t,
+            ),
+          }));
+        }
+      }
     }
     if (learned.category || learned.split) {
       void updateConfig((c) => ({ ...c, merchantRules: learnMerchant(c.merchantRules, after, learned) }));

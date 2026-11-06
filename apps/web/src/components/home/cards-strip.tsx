@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useDerived, useFmt } from "@/lib/client/derived";
 import { useDragScroll } from "@/lib/client/use-drag-scroll";
 import { useReveal } from "@/lib/client/use-reveal";
+import { cardGroups, rootCardId } from "@/lib/domain/card-groups";
 import { sumCents } from "@/lib/engines/analytics";
 import { CreditCardVisual } from "./credit-card";
 
@@ -14,9 +15,11 @@ export function CardsStrip() {
   const [ref, shown] = useReveal<HTMLElement>();
   const [rowRef, drag] = useDragScroll<HTMLDivElement>();
   // Do cartão que mais gastou para o que menos gastou.
-  const cards = d.config.cards
+  // Virtuais e adicionais entram no cartão principal (é a mesma fatura).
+  const cards = cardGroups(d.config.cards)
+    .map((g) => g.card)
     .filter((c) => d.view === "COUPLE" || c.owner === d.view)
-    .map((c) => ({ c, total: sumCents(d.txs.filter((t) => t.cardId === c.id)) }))
+    .map((c) => ({ c, total: sumCents(d.txs.filter((t) => rootCardId(t.cardId, d.config.cards) === c.id)) }))
     .sort((a, b) => b.total - a.total);
   const top = Math.max(1, cards[0]?.total ?? 1);
   return (

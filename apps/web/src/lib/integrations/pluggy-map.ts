@@ -3,7 +3,7 @@
  * Escopo estrito: só contas de cartão de crédito, só leitura.
  */
 import { addMonths, monthDiff } from "../domain/months";
-import type { CardBrand, CreditCard, MonthKey, Transaction, UserId } from "../domain/types";
+import type { CardBrand, CreditCard, MonthKey, Split, Transaction, UserId } from "../domain/types";
 import { cleanDescription, guessCategory, merchantKeyOf } from "../importers/normalize";
 import { isInvoicePayment } from "../importers/types";
 
@@ -46,6 +46,8 @@ export interface PluggyBill {
   dueDate: string;
   billClosingDate?: string | null;
   totalAmount?: number | null;
+  /** Pagamentos que o banco registrou nessa fatura. */
+  payments?: { paymentDate?: string | null; amount?: number | null }[] | null;
 }
 
 /** Valor em reais: compras em dólar vêm com `amount` na moeda original. */
@@ -56,6 +58,8 @@ export function brlAmount(t: PluggyTransaction): number {
 /** Pagamento da fatura (não é gasto): pela categoria da Pluggy ou pela descrição. */
 export function isCardPayment(t: PluggyTransaction): boolean {
   if (/credit card payment/i.test(t.category ?? "")) return true;
+  // XP: o pagamento da fatura vem como "Pagamentos Validos Normais", na categoria "Transfers".
+  if (/pagamentos?\s+v[aá]lidos/i.test(`${t.description} ${t.descriptionRaw ?? ""}`)) return true;
   return [t.description, t.descriptionRaw ?? ""].some(
     (d) => isInvoicePayment(d) || /\b(pag(to|amento)?|pgto)\.?\s*(de\s*)?(fatura|cart[aã]o)|deb(ito)?\.?\s*aut(om)?\.?\s*fatura/i.test(d),
   );
@@ -107,6 +111,8 @@ export function resolveCard(
 export function cardResolver(account: PluggyAccount, owner: UserId, cards: CreditCard[]) {
   const pool = [...cards];
   const created: CreditCard[] = [];
+  /** Cartões que já existiam e ganharam o vínculo com o cartão principal. */
+  const updated: CreditCard[] = [];
   const { card: main, created: mainCreated } = resolveCard(account, owner, pool);
   if (mainCreated) {
     pool.push(main);
@@ -116,14 +122,24 @@ export function cardResolver(account: PluggyAccount, owner: UserId, cards: Credi
   const forLast4 = (last4: string | null): CreditCard => {
     if (!last4 || last4 === main.last4) return main;
     const existing = pool.find((c) => c.owner === owner && c.last4 === last4);
-    if (existing) return existing;
+    if (existing) {
+      // Cartões virtuais/adicionais criados antes de existir o vínculo: liga ao cartão principal.
+      if (!existing.parentId && existing.id !== main.id && existing.id.startsWith(`card-pluggy-${account.id.slice(0, 8)}-`)) {
+        const linked = { ...existing, parentId: main.id };
+        pool[pool.indexOf(existing)] = linked;
+        updated.push(linked);
+        return linked;
+      }
+      return existing;
+    }
     const card: CreditCard = {
       id: `card-pluggy-${account.id.slice(0, 8)}-${last4}`,
       owner,
-      nickname: `${base} virtual`.slice(0, 40),
+      nickname: `${base} final ${last4}`.slice(0, 40),
       last4,
       brand: main.brand,
-      theme: pool.length % 4,
+      theme: main.theme,
+      parentId: main.id,
     };
     pool.push(card);
     created.push(card);
@@ -132,6 +148,7 @@ export function cardResolver(account: PluggyAccount, owner: UserId, cards: Credi
   return {
     main,
     created,
+    updated,
     forTx: (t: PluggyTransaction) => forLast4(last4Of(t.creditCardMetadata?.cardNumber)),
   };
 }
@@ -214,7 +231,7 @@ export function mapCardTransactions(
     if (forecast <= lastBill! && closing && t.date.slice(0, 10) <= closing) return null;
     return openMonth;
   };
-  const raw: { tx: Transaction; billMonth?: MonthKey }[] = [];
+  const raw: { tx: Transaction; billMonth?: MonthKey; linked: boolean }[] = [];
   for (const t of txs) {
     const rawDesc = t.merchant?.name || t.description || t.descriptionRaw || "";
     if (!rawDesc || isCardPayment(t)) continue;
@@ -234,6 +251,7 @@ export function mapCardTransactions(
         ? { current: meta.installmentNumber, total: meta.totalInstallments }
         : undefined;
     raw.push({
+      linked: Boolean(linked),
       billMonth: linked ?? unlinked,
       tx: {
         id: `plg-${t.id}`,
@@ -246,7 +264,7 @@ export function mapCardTransactions(
         paidBy: card.owner,
         category,
         tags: category === "assinaturas" || subscriptionMerchants.includes(merchantKey) ? ["Assinatura"] : [],
-        split: { type: "SHARED_DEFAULT" },
+        split: card.defaultSplit ?? { type: "SHARED_DEFAULT" },
         installment,
         source: "pluggy",
       },
@@ -273,7 +291,10 @@ export function mapCardTransactions(
   // Alguns bancos (Santander) já lançam na fatura aberta as parcelas do próximo ciclo; outros (XP) só
   // lançam no fechamento. Nesse caso, as parcelas que faltam são previstas a partir da última fatura fechada.
   const inOpen = placed.filter((d) => d.month === openMonth);
-  const openWithoutInstallments = inOpen.length > 0 && !inOpen.some((d) => d.tx.installment);
+  // Banco que nunca manda parcela fora de fatura fechada (XP) só lança as parcelas no fechamento.
+  // Vale também com a fatura aberta vazia, logo depois do fechamento.
+  const neverUnlinkedInstallments = !raw.some((r) => !r.linked && r.tx.installment);
+  const openWithoutInstallments = !inOpen.some((d) => d.tx.installment) && (inOpen.length > 0 || neverUnlinkedInstallments);
   const latest = openWithoutInstallments && lastBill ? lastBill : (openMonth ?? placed.map((d) => d.month).sort().at(-1));
   for (const list of groups.values()) {
     const top = Math.max(...list.map((d) => d.tx.installment!.current));
@@ -295,7 +316,8 @@ export function mapCardTransactions(
   // Faturas fechadas: o banco às vezes cobra coisas que não vêm como compra (parcela de fatura
   // parcelada, tarifas). Um lançamento de ajuste faz o total do mês bater com o da fatura.
   for (const b of bills) {
-    if (typeof b.totalAmount !== "number") continue;
+    // Total zero (ou crédito) quer dizer que o banco não informou o valor: não dá para completar.
+    if (typeof b.totalAmount !== "number" || b.totalAmount <= 0) continue;
     const m = monthOfIso(b.dueDate);
     const sum = (out.get(m) ?? []).reduce((acc, t) => acc + t.amount, 0);
     const diff = Math.round(b.totalAmount * 100) - sum;
@@ -307,13 +329,14 @@ export function mapCardTransactions(
       externalId: `pluggy:ajuste:${b.id}`,
       date: (b.billClosingDate ?? b.dueDate).slice(0, 10),
       description: "Outros lançamentos da fatura",
-      merchantKey: "ajuste-fatura",
+      // Um por cartão: a divisão lembrada para o ajuste de um cartão não vale para os outros.
+      merchantKey: `ajuste-fatura-${card.id}`.slice(0, 80),
       amount: diff,
       cardId: card.id,
       paidBy: card.owner,
       category: "outros",
       tags: [],
-      split: { type: "SHARED_DEFAULT" },
+      split: card.defaultSplit ?? { type: "SHARED_DEFAULT" },
       source: "pluggy",
     });
   }
@@ -359,7 +382,11 @@ export function reconcile(
       continue;
     }
     seen.add(t.externalId);
-    const next = { ...t, amount: fresh.amount, date: fresh.date, installment: fresh.installment, cardId: fresh.cardId, paidBy: fresh.paidBy, pluggyItemId: fresh.pluggyItemId ?? t.pluggyItemId };
+    const next = {
+      ...t,
+      // Ajuste antigo (de antes de ter um por cartão) passa a usar o nome por cartão.
+      ...(t.merchantKey === "ajuste-fatura" ? { merchantKey: fresh.merchantKey } : {}),
+      amount: fresh.amount, date: fresh.date, installment: fresh.installment, cardId: fresh.cardId, paidBy: fresh.paidBy, pluggyItemId: fresh.pluggyItemId ?? t.pluggyItemId };
     if (
       next.amount !== t.amount ||
       next.date !== t.date ||
@@ -370,12 +397,58 @@ export function reconcile(
     kept.push(next);
   }
   const known = new Set(existing.map((t) => t.externalId).filter(Boolean));
-  const fresh = incoming.filter((t) => !seen.has(t.externalId) && !known.has(t.externalId));
+  const gone = existing.filter((t) => t.source === "pluggy" && syncedCardIds.has(t.cardId) && !byExt.has(t.externalId));
+  const fresh = incoming
+    .filter((t) => !seen.has(t.externalId) && !known.has(t.externalId))
+    .map((t) => inheritEdits(t, gone));
   return {
     merged: [...kept, ...fresh].sort((a, b) => a.date.localeCompare(b.date)),
     added: fresh.length,
     updated,
     removed,
+  };
+}
+
+/**
+ * A mesma compra às vezes volta do banco com outro id: a parcela prevista vira a parcela real,
+ * ou a compra pendente é lançada na fatura. A nova herda a divisão, o setor, a descrição e as
+ * tags que o casal tinha escolhido na antiga.
+ */
+function inheritEdits(t: Transaction, gone: Transaction[]): Transaction {
+  const i = t.installment;
+  const old =
+    (i &&
+      gone.find(
+        (g) => g.cardId === t.cardId && g.merchantKey === t.merchantKey && g.installment?.current === i.current && g.installment?.total === i.total,
+      )) ||
+    (!i && gone.find((g) => !g.installment && g.cardId === t.cardId && g.merchantKey === t.merchantKey && g.amount === t.amount && g.date === t.date));
+  if (!old) return t;
+  gone.splice(gone.indexOf(old), 1);
+  const userTags = old.tags.filter((x) => x !== PROJECTED_TAG && !t.tags.includes(x));
+  return { ...t, split: old.split, category: old.category, description: old.description, tags: [...t.tags, ...userTags] };
+}
+
+/**
+ * Estorno herda a divisão da compra original (mesmo cartão e loja; de preferência o mesmo valor),
+ * para não desequilibrar o acerto quando a compra era só de um dos dois.
+ */
+export function refundSplitIndex() {
+  const byKey = new Map<string, { amount: number; split: Split }[]>();
+  const keyOf = (t: Pick<Transaction, "cardId" | "merchantKey">) => `${t.cardId}|${t.merchantKey}`;
+  return {
+    add(txs: Transaction[]) {
+      for (const t of txs) {
+        if (t.amount <= 0 || !t.merchantKey || t.merchantKey === "desconhecido") continue;
+        byKey.set(keyOf(t), [...(byKey.get(keyOf(t)) ?? []), { amount: t.amount, split: t.split }]);
+      }
+    },
+    apply(t: Transaction): Transaction {
+      if (t.amount >= 0) return t;
+      const list = byKey.get(keyOf(t));
+      if (!list?.length) return t;
+      const same = [...list].reverse().find((p) => p.amount === -t.amount) ?? list[list.length - 1];
+      return { ...t, split: same.split };
+    },
   };
 }
 
@@ -393,7 +466,10 @@ export function billPayments(bills: PluggyBill[], txs: PluggyTransaction[]): Map
   sorted.forEach((b, i) => {
     const from = i > 0 ? plusDays(sorted[i - 1].dueDate, 5) : "0000-00-00";
     const to = plusDays(b.dueDate, 5);
-    const paid = payments.filter((p) => p.date > from && p.date <= to).reduce((s, p) => s + p.cents, 0);
+    // O que o próprio banco registrou na fatura vale mais que adivinhar pelos lançamentos.
+    const fromBill = (b.payments ?? []).reduce((s, p) => s + Math.round(Math.abs(p.amount ?? 0) * 100), 0);
+    const fromTxs = payments.filter((p) => p.date > from && p.date <= to).reduce((s, p) => s + p.cents, 0);
+    const paid = Math.max(fromBill, fromTxs);
     const total = Math.round((b.totalAmount ?? 0) * 100);
     out.set(b.id, { paid, status: total <= 0 || paid >= total - 100 ? "paga" : paid > 0 ? "parcial" : "em aberto" });
   });

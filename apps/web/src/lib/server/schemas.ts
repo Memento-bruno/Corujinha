@@ -85,6 +85,8 @@ export const configSchema = z.object({
         last4: z.string().regex(/^\d{4}$/, "Informe apenas os 4 últimos dígitos."),
         brand: z.enum(["visa", "mastercard", "elo", "amex", "hipercard", "outra"]),
         theme: z.number().int().min(0).max(3),
+        parentId: z.string().min(1).max(80).optional(),
+        defaultSplit: splitSchema.optional(),
       }),
     )
     // Folga para cartões virtuais e adicionais criados pela sincronização do banco.

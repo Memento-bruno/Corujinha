@@ -6,7 +6,7 @@ import { applyCardRecurring } from "../engines/recurring";
 import { ConflictError } from "../server/blob-store";
 import type { DriveDatabaseService } from "../server/database";
 import { getBills, getCreditAccounts, getTransactions } from "./pluggy-client";
-import { billPayments, cardResolver, mapCardTransactions, reconcile } from "./pluggy-map";
+import { billPayments, cardResolver, mapCardTransactions, reconcile, refundSplitIndex } from "./pluggy-map";
 
 export interface SyncSummary {
   added: number;
@@ -46,6 +46,8 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   const billsByMonth = new Map<MonthKey, Record<string, BankBill>>();
 
   let okItems = 0;
+  /** Cartões virtuais já salvos que ganharam o vínculo com o cartão principal (id → principal). */
+  const linkedCards = new Map<string, string>();
   const syncedCardIds = new Set<string>();
   for (const item of items) {
     try {
@@ -65,6 +67,10 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
         for (const c of resolver.created) {
           cfg.cards.push(c);
           summary.newCards.push(`${c.nickname} •${c.last4}`);
+        }
+        for (const c of resolver.updated) {
+          cfg.cards = cfg.cards.map((x) => (x.id === c.id ? c : x));
+          linkedCards.set(c.id, c.parentId!);
         }
         // Só marca o cartão como sincronizado depois de ler tudo dele sem erro.
         for (const [m, list] of mapped) {
@@ -90,7 +96,10 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
     const known = new Set(latest.data.cards.map((c) => c.id));
     const next = {
       ...latest.data,
-      cards: [...latest.data.cards, ...cfg.cards.filter((c) => !known.has(c.id))],
+      cards: [
+        ...latest.data.cards.map((c) => (linkedCards.has(c.id) && !c.parentId ? { ...c, parentId: linkedCards.get(c.id) } : c)),
+        ...cfg.cards.filter((c) => !known.has(c.id)),
+      ],
       pluggyLastSyncAt: new Date().toISOString(),
     };
     try {
@@ -113,10 +122,21 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   // Compra do banco de uma conexão que não existe mais (ou de cartão que nenhuma conexão trouxe).
   const isOrphan = (t: Transaction) =>
     allClean && t.source === "pluggy" && (t.pluggyItemId ? !itemIds.has(t.pluggyItemId) : !syncedCardIds.has(t.cardId));
+  const cardById = new Map(cfg.cards.map((c) => [c.id, c]));
+  /** Divisão definida no cartão (ex.: adicional de um dos dois) vale mais que a lembrada da loja. */
+  const withCardSplit = (t: Transaction): Transaction => {
+    const s = cardById.get(t.cardId)?.defaultSplit;
+    return s ? { ...t, split: s } : t;
+  };
+  // Os meses vão do mais antigo para o mais novo: o estorno encontra a compra original nos meses anteriores.
+  const refunds = refundSplitIndex();
   for (const month of [...months].sort()) {
-    const incoming = (byMonth.get(month) ?? []).map((t) => applyCardRecurring(debts, applyMerchantRule(cfg.merchantRules, t)));
+    const mapped = (byMonth.get(month) ?? []).map((t) => applyCardRecurring(debts, withCardSplit(applyMerchantRule(cfg.merchantRules, t))));
+    let incoming = mapped;
     for (let attempt = 0; attempt < 3; attempt++) {
       const cur = await db.getStatement(month);
+      if (attempt === 0) refunds.add([...cur.data.transactions, ...mapped.filter((t) => !cur.data.transactions.some((x) => x.externalId === t.externalId))]);
+      incoming = mapped.map((t) => refunds.apply(t));
       if (cur.data.snapshot) {
         if (incoming.length) summary.skippedClosedMonths.push(month);
         break;
