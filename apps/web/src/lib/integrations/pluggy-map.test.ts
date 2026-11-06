@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CreditCard, Transaction } from "../domain/types";
-import { brandOf, expenseSign, last4Of, mapCardTransactions, mergeNew, resolveCard, type PluggyTransaction } from "./pluggy-map";
+import { billPayments, brandOf, expenseSign, isCardPayment, last4Of, mapCardTransactions, mergeNew, reconcile, refundSplitIndex, resolveCard, type PluggyTransaction } from "./pluggy-map";
 
 const card: CreditCard = { id: "card-1", owner: "USER_A", nickname: "Nubank", last4: "1234", brand: "mastercard", theme: 0 };
 
@@ -155,7 +155,7 @@ describe("cartões virtuais", () => {
     expect(list.find((t) => t.externalId === "pluggy:f")!.cardId).toBe("card-1");
     expect(list.find((t) => t.externalId === "pluggy:n")!.cardId).toBe("card-1");
     expect(list.find((t) => t.externalId === "pluggy:v")!.cardId).toBe("card-pluggy-acc12345-9876");
-    expect(r.created.map((c) => [c.last4, c.nickname])).toEqual([["9876", "Santander virtual"]]);
+    expect(r.created.map((c) => [c.last4, c.nickname, c.parentId])).toEqual([["9876", "Santander final 9876", "card-1"]]);
   });
 });
 
@@ -181,13 +181,27 @@ describe("faturas futuras", () => {
     expect(out.get("2027-01")!.map((t) => t.externalId)).toEqual(["pluggy:tv4:p6"]);
   });
   it("não prevê parcelas de compra que sumiu da fatura aberta (terminou ou foi antecipada)", () => {
+    // Santander: a fatura aberta já tem a parcela seguinte de outra compra; a da LOJA X não veio.
     const out = mapCardTransactions(
-      [tx("x", 50, { description: "LOJA X", creditCardMetadata: { installmentNumber: 2, totalInstallments: 5, billId: "b10" } })],
+      [
+        tx("x", 50, { description: "LOJA X", creditCardMetadata: { installmentNumber: 2, totalInstallments: 5, billId: "b10" } }),
+        tx("y", 20, { description: "LOJA Y", creditCardMetadata: { installmentNumber: 2, totalInstallments: 2 } }),
+      ],
       card,
       bills,
       [],
     );
-    expect([...out.keys()]).toEqual(["2026-10"]);
+    expect([...out.keys()]).toEqual(["2026-10", "2026-11"]);
+    expect(out.get("2026-11")!.map((t) => t.externalId)).toEqual(["pluggy:y"]);
+  });
+  it("XP logo depois do fechamento (fatura aberta vazia): continua prevendo as parcelas", () => {
+    const out = mapCardTransactions(
+      [tx("x", 50, { description: "LOJA X", creditCardMetadata: { installmentNumber: 2, totalInstallments: 4, billId: "b10" } })],
+      card,
+      bills,
+      [],
+    );
+    expect([...out.keys()]).toEqual(["2026-10", "2026-11", "2026-12"]);
   });
   it("banco que só lança parcelas no fechamento (XP): prevê a partir da última fatura fechada", () => {
     const out = mapCardTransactions(
@@ -302,5 +316,63 @@ describe("billPayments", () => {
     expect(r.get("b9")!.status).toBe("paga");
     expect(r.get("b10")).toEqual({ paid: 30000, status: "parcial" });
     expect(r.get("b11")!.status).toBe("em aberto");
+  });
+});
+
+describe("revisão de 05/11", () => {
+  const bills = [
+    { id: "b9", dueDate: "2026-09-10", totalAmount: 100 },
+    { id: "b10", dueDate: "2026-10-10", totalAmount: 0 },
+  ];
+  it("reconhece o pagamento da fatura do XP", () => {
+    expect(isCardPayment(tx("p", -3531.29, { description: "Pagamentos Validos Normais", category: "Transfers" }))).toBe(true);
+  });
+  it("fatura com total zero não ganha ajuste que anula as compras", () => {
+    const out = mapCardTransactions([tx("a", 40, { creditCardMetadata: { billId: "b10" } })], card, bills, []);
+    expect(out.get("2026-10")!.map((t) => t.amount)).toEqual([4000]);
+  });
+  it("o ajuste da fatura é por cartão", () => {
+    const out = mapCardTransactions([tx("a", 40, { creditCardMetadata: { billId: "b9" } })], card, bills, []);
+    expect(out.get("2026-09")!.find((t) => t.description === "Outros lançamentos da fatura")!.merchantKey).toBe("ajuste-fatura-card-1");
+  });
+  it("usa os pagamentos registrados na própria fatura", () => {
+    const pay = billPayments([{ id: "b9", dueDate: "2026-09-10", totalAmount: 100, payments: [{ amount: 100 }] }], []);
+    expect(pay.get("b9")!.status).toBe("paga");
+  });
+  it("compras do cartão usam a divisão definida nele", () => {
+    const only: CreditCard = { ...card, defaultSplit: { type: "INDIVIDUAL_B" } };
+    const out = mapCardTransactions([tx("a", 40)], only, [], []);
+    expect(out.get("2026-10")![0].split).toEqual({ type: "INDIVIDUAL_B" });
+  });
+  it("parcela real herda a divisão da prevista e compra lançada herda a da pendente", () => {
+    const base: Transaction = {
+      id: "plg-x-p3",
+      externalId: "pluggy:x:p3",
+      date: "2026-08-01",
+      description: "TV do quarto",
+      merchantKey: "tv",
+      amount: 100,
+      cardId: "card-1",
+      paidBy: "USER_A",
+      category: "compras",
+      tags: ["Prevista", "Casa"],
+      split: { type: "INDIVIDUAL_B" },
+      installment: { current: 3, total: 10 },
+      source: "pluggy",
+    };
+    const pending: Transaction = { ...base, id: "plg-p", externalId: "pluggy:p", installment: undefined, tags: [], split: { type: "INDIVIDUAL_A" } };
+    const real = { ...base, id: "plg-y", externalId: "pluggy:y", description: "TV", tags: [], split: { type: "SHARED_DEFAULT" as const } };
+    const posted = { ...pending, id: "plg-q", externalId: "pluggy:q", split: { type: "SHARED_DEFAULT" as const } };
+    const r = reconcile([base, pending], [real, posted], new Set(["card-1"]));
+    const y = r.merged.find((t) => t.externalId === "pluggy:y")!;
+    expect(y).toMatchObject({ split: { type: "INDIVIDUAL_B" }, description: "TV do quarto", tags: ["Casa"] });
+    expect(r.merged.find((t) => t.externalId === "pluggy:q")!.split).toEqual({ type: "INDIVIDUAL_A" });
+  });
+  it("estorno herda a divisão da compra original", () => {
+    const idx = refundSplitIndex();
+    const buy = { id: "1", date: "2026-08-01", description: "Loja", merchantKey: "loja", amount: 5000, cardId: "c", paidBy: "USER_A", category: "compras", tags: [], split: { type: "INDIVIDUAL_B" }, source: "pluggy" } as Transaction;
+    idx.add([buy]);
+    expect(idx.apply({ ...buy, id: "2", amount: -5000, split: { type: "SHARED_DEFAULT" } }).split).toEqual({ type: "INDIVIDUAL_B" });
+    expect(idx.apply({ ...buy, id: "3", amount: -5000, merchantKey: "outra", split: { type: "SHARED_DEFAULT" } }).split).toEqual({ type: "SHARED_DEFAULT" });
   });
 });

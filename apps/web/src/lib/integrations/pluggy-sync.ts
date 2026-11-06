@@ -6,7 +6,7 @@ import { applyCardRecurring, cardRecurringFor } from "../engines/recurring";
 import { ConflictError } from "../server/blob-store";
 import type { DriveDatabaseService } from "../server/database";
 import { getBills, getCreditAccounts, getTransactions } from "./pluggy-client";
-import { billPayments, cardResolver, mapCardTransactions, reconcile } from "./pluggy-map";
+import { billPayments, cardResolver, mapCardTransactions, reconcile, refundSplitIndex } from "./pluggy-map";
 
 export interface SyncSummary {
   added: number;
@@ -46,6 +46,8 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   const billsByMonth = new Map<MonthKey, Record<string, BankBill>>();
 
   let okItems = 0;
+  /** Cartões virtuais já salvos que ganharam o vínculo com o cartão principal (id → principal). */
+  const linkedCards = new Map<string, string>();
   const syncedCardIds = new Set<string>();
   for (const item of items) {
     try {
@@ -66,6 +68,10 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
           cfg.cards.push(c);
           summary.newCards.push(`${c.nickname} •${c.last4}`);
         }
+        for (const c of resolver.updated) {
+          cfg.cards = cfg.cards.map((x) => (x.id === c.id ? c : x));
+          linkedCards.set(c.id, c.parentId!);
+        }
         // Só marca o cartão como sincronizado depois de ler tudo dele sem erro.
         for (const [m, list] of mapped) {
           if (m < firstMonth) continue;
@@ -85,21 +91,19 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   if (okItems === 0) return summary;
 
   // Salva cartões novos antes das transações que apontam para eles (relendo para não sobrescrever edições).
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const latest = await db.getConfig();
-    const known = new Set(latest.data.cards.map((c) => c.id));
-    const next = {
-      ...latest.data,
-      cards: [...latest.data.cards, ...cfg.cards.filter((c) => !known.has(c.id))],
-      pluggyLastSyncAt: new Date().toISOString(),
+  // A data da sincronização só é gravada no FIM: se algo falhar no meio (tempo esgotado, conflito),
+  // a primeira sincronização automática tenta de novo na próxima abertura em vez de ficar pela metade.
+  const newCards = cfg.cards.filter((c) => !cfgV.data.cards.some((k) => k.id === c.id));
+  if (newCards.length || linkedCards.size) await saveConfigWith(db, (latest) => {
+    const known = new Set(latest.cards.map((c) => c.id));
+    return {
+      ...latest,
+      cards: [
+        ...latest.cards.map((c) => (linkedCards.has(c.id) && !c.parentId ? { ...c, parentId: linkedCards.get(c.id) } : c)),
+        ...newCards.filter((c) => !known.has(c.id)),
+      ],
     };
-    try {
-      await db.saveConfig(next, latest.etag);
-      break;
-    } catch (e) {
-      if (!(e instanceof ConflictError) || attempt === 2) throw e;
-    }
-  }
+  });
   // Passa por todos os meses da janela (inclusive os que ficaram vazios), até 2 meses à frente.
   const lastMonth = addMonths(monthOf(new Date()), 2);
   const months = new Set<MonthKey>([...byMonth.keys(), ...billsByMonth.keys()]);
@@ -113,15 +117,30 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   // Compra do banco de uma conexão que não existe mais (ou de cartão que nenhuma conexão trouxe).
   const isOrphan = (t: Transaction) =>
     allClean && t.source === "pluggy" && (t.pluggyItemId ? !itemIds.has(t.pluggyItemId) : !syncedCardIds.has(t.cardId));
-  for (const month of [...months].sort()) {
-    // Na primeira sincronização tudo é novo: não pede revisão de nada (seria a fatura inteira).
-    const firstSync = !cfgV.data.pluggyLastSyncAt;
-    const incoming = (byMonth.get(month) ?? []).map((t) => {
-      const tx = applyCardRecurring(debts, applyMerchantRule(cfg.merchantRules, t));
+  const cardById = new Map(cfg.cards.map((c) => [c.id, c]));
+  /** Divisão definida no cartão (ex.: adicional de um dos dois) vale mais que a lembrada da loja. */
+  const withCardSplit = (t: Transaction): Transaction => {
+    const s = cardById.get(t.cardId)?.defaultSplit;
+    return s ? { ...t, split: s } : t;
+  };
+  // Na primeira sincronização tudo é novo: não pede revisão de nada (seria a fatura inteira).
+  const firstSync = !cfgV.data.pluggyLastSyncAt;
+  // Lê todos os meses de uma vez (em paralelo): a sincronização tem 60 s na Vercel.
+  await db.prime();
+  const sortedMonths = [...months].sort();
+  const firstRead = new Map(await Promise.all(sortedMonths.map(async (m) => [m, await db.getStatement(m)] as const)));
+  // Os meses vão do mais antigo para o mais novo: o estorno encontra a compra original nos meses anteriores.
+  const refunds = refundSplitIndex();
+  for (const month of sortedMonths) {
+    const mapped = (byMonth.get(month) ?? []).map((t) => {
+      const tx = applyCardRecurring(debts, withCardSplit(applyMerchantRule(cfg.merchantRules, t)));
       return firstSync || cardRecurringFor(debts, t) ? tx : flagForReview(cfg.merchantRules, tx);
     });
+    let incoming = mapped;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const cur = await db.getStatement(month);
+      const cur = attempt === 0 ? firstRead.get(month)! : await db.getStatement(month);
+      if (attempt === 0) refunds.add([...cur.data.transactions, ...mapped.filter((t) => !cur.data.transactions.some((x) => x.externalId === t.externalId))]);
+      incoming = mapped.map((t) => refunds.apply(t));
       if (cur.data.snapshot) {
         if (incoming.length) summary.skippedClosedMonths.push(month);
         break;
@@ -149,7 +168,22 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
     }
   }
 
+  // Tudo gravado: agora sim marca que a sincronização terminou.
+  await saveConfigWith(db, (latest) => ({ ...latest, pluggyLastSyncAt: new Date().toISOString() }));
   return summary;
+}
+
+/** Grava o cadastro aplicando `fn` na versão mais nova (relê e tenta de novo se outro gravou antes). */
+async function saveConfigWith(db: DriveDatabaseService, fn: (c: HouseholdConfig) => HouseholdConfig) {
+  for (let attempt = 0; ; attempt++) {
+    const latest = await db.getConfig();
+    try {
+      await db.saveConfig(fn(latest.data), latest.etag);
+      return;
+    } catch (e) {
+      if (!(e instanceof ConflictError) || attempt >= 2) throw e;
+    }
+  }
 }
 
 /** Apaga as compras que vieram do banco (Open Finance) dos meses abertos. Meses fechados ficam como estão. */

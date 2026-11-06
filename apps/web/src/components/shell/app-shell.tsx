@@ -11,13 +11,18 @@ import { Onboarding } from "./onboarding";
 import { Toasts } from "./toasts";
 
 function Body({ children }: { children: React.ReactNode }) {
-  const { state, error, reload } = useStore();
+  const { state, error, errorCode, reload } = useStore();
   if (!state) {
     return (
       <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-3 text-sm text-zinc-500">
         {error ? (
           <>
             <p className="max-w-xs text-center">Não consegui carregar os dados: {error}</p>
+            {errorCode === "DRIVE_AUTH" && (
+              <a href="/api/drive/connect" className="rounded-full bg-zinc-900 px-4 py-2 font-semibold text-white">
+                Renovar conexão com o Drive
+              </a>
+            )}
             <button className="font-semibold text-zinc-900 underline" onClick={() => void reload()}>
               Tentar de novo
             </button>

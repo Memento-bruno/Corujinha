@@ -77,7 +77,7 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
   };
 
   const clearBankPurchases = async () => {
-    if (!window.confirm("Apagar todas as compras que vieram do banco? As compras que vocês lançaram à mão ficam. Depois é só sincronizar de novo.")) return;
+    if (!window.confirm("Apagar todas as compras que vieram do banco? As compras que vocês lançaram à mão ficam. Depois é só sincronizar de novo. Antes, o app guarda uma cópia de segurança (Ajustes → Segurança).")) return;
     setClearing(true);
     try {
       const res = await fetch("/api/pluggy/clear", { method: "POST" });
@@ -94,7 +94,7 @@ export function OpenFinanceCard({ config }: { config: HouseholdConfig }) {
   };
 
   const disconnect = async (id: string) => {
-    if (!window.confirm("Desconectar este banco? As compras que vieram dele saem do app (meses fechados ficam como estão).")) return;
+    if (!window.confirm("Desconectar este banco? As compras que vieram dele saem do app (meses fechados ficam como estão). Antes, o app guarda uma cópia de segurança (Ajustes → Segurança).")) return;
     setClearing(true);
     try {
       const res = await fetch("/api/pluggy/disconnect", {

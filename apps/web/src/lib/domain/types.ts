@@ -85,6 +85,10 @@ export interface CreditCard {
   brand: CardBrand;
   /** Índice do gradiente visual (0-3). */
   theme: number;
+  /** Cartão virtual ou adicional: id do cartão principal da mesma fatura. */
+  parentId?: string;
+  /** Divisão das compras novas deste cartão (ex.: adicional que só um dos dois usa). Sem isso, a divisão padrão. */
+  defaultSplit?: Split;
 }
 
 export interface HouseholdConfig {
