@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useDerived, useFmt } from "@/lib/client/derived";
 import { useStore } from "@/lib/client/store";
 import type { Cents, RecurringDebt } from "@/lib/domain/types";
+import { cardBillKey } from "@/lib/engines/card-bills";
 import { isDebtActiveIn } from "@/lib/engines/settlement";
 import { cn } from "@/lib/utils";
 import { DebtSheet, newDebt } from "../faturas/recurring-tab";
@@ -27,8 +28,7 @@ interface DueItem {
   cardKey?: string;
 }
 
-/** Chave da marca "Já paguei" de uma fatura de cartão. */
-export const cardBillKey = (cardId: string, month: string) => `${cardId}|${month}`;
+export { cardBillKey };
 
 /** Lembretes de vencimento do mês (água, internet, faturas dos cartões...), em ordem de data. */
 export function DueDates() {

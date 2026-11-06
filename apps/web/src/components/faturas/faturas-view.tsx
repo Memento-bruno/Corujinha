@@ -17,6 +17,7 @@ import { CreditCardVisual } from "../home/credit-card";
 import { Sheet } from "../ui/sheet";
 import { ImportTab } from "./import-tab";
 import { ManualPurchaseSheet } from "./manual-purchase";
+import { PaidBills } from "./paid-bills";
 import { Purchases } from "./purchases";
 import { DebtSheet, KINDS, RecurringTab, newDebt } from "./recurring-tab";
 import { splitLabel } from "./split-badge";
@@ -202,6 +203,8 @@ export function FaturasView() {
           </div>
         )}
       </section>
+
+      <PaidBills />
 
       <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className={cn(panel, "min-w-0")}>
