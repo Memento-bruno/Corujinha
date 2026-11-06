@@ -3,7 +3,7 @@
  * Escopo estrito: só contas de cartão de crédito, só leitura.
  */
 import { addMonths, monthDiff } from "../domain/months";
-import type { CardBrand, CreditCard, MonthKey, Transaction, UserId } from "../domain/types";
+import { ownerSplit, type CardBrand, type CreditCard, type MonthKey, type Transaction, type UserId } from "../domain/types";
 import { cleanDescription, guessCategory, merchantKeyOf } from "../importers/normalize";
 import { isInvoicePayment } from "../importers/types";
 
@@ -246,7 +246,7 @@ export function mapCardTransactions(
         paidBy: card.owner,
         category,
         tags: category === "assinaturas" || subscriptionMerchants.includes(merchantKey) ? ["Assinatura"] : [],
-        split: { type: "SHARED_DEFAULT" },
+        split: ownerSplit(card.owner),
         installment,
         source: "pluggy",
       },
@@ -313,7 +313,7 @@ export function mapCardTransactions(
       paidBy: card.owner,
       category: "outros",
       tags: [],
-      split: { type: "SHARED_DEFAULT" },
+      split: ownerSplit(card.owner),
       source: "pluggy",
     });
   }

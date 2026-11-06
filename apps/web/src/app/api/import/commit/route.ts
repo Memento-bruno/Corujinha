@@ -5,7 +5,7 @@ import { BadRequestError, handle } from "@/lib/server/http";
 import { importCommitSchema } from "@/lib/server/schemas";
 import { requireViewer } from "@/lib/server/session";
 import { guessCategory, merchantKeyOf } from "@/lib/importers/normalize";
-import type { Transaction } from "@/lib/domain/types";
+import { isSharedSplit, ownerSplit, type Transaction } from "@/lib/domain/types";
 
 /**
  * Grava as linhas confirmadas na fatura do mês escolhido.
@@ -43,7 +43,8 @@ export async function POST(req: Request) {
           paidBy: card.owner,
           category: rule?.category ?? category,
           tags: (rule?.category ?? category) === "assinaturas" || config.subscriptionMerchants.includes(merchantKey) ? ["Assinatura"] : [],
-          split: rule?.split ?? { type: "SHARED_DEFAULT" },
+          // Compra de cartão é do dono da fatura; só fica dividida se o casal marcou a loja como dividida.
+          split: isSharedSplit(rule?.split) ? rule!.split! : ownerSplit(card.owner),
           installment: row.installment,
           source: body.source,
           ...(rule ? {} : { toReview: true }),

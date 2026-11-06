@@ -77,7 +77,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <AppProvider>
       <Splash zoom={navZoom} />
       <Toasts />
-      <div className="mx-auto w-full max-w-6xl px-3 pb-32 sm:px-6">
+      {/* Espaço no fim do tamanho do menu de baixo (que cresce no celular e sobe com a barrinha
+          do iPhone), para o último quadro não ficar escondido atrás dele. */}
+      <div
+        className="mx-auto w-full max-w-6xl px-3 sm:px-6"
+        style={{ paddingBottom: `calc((76px + env(safe-area-inset-bottom)) * ${navZoom} + 28px)` }}
+      >
         <Body>{children}</Body>
       </div>
       <BottomNav zoom={navZoom} />

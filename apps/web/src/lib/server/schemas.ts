@@ -129,6 +129,7 @@ export const configSchema = z.object({
   pluggyLastSyncAt: z.string().optional(),
   paidCardBills: z.array(z.string().max(100)).max(1000).optional(),
   reminderEmails: z.partialRecord(userId, z.boolean()).optional(),
+  ownerPaysCardsAt: z.string().max(40).optional(),
   updatedAt: z.string(),
 });
 

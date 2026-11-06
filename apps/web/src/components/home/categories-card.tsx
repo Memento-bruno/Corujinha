@@ -29,12 +29,13 @@ export function CategoriesCard() {
   const [mode, setMode] = useState<"donut" | "bars">("donut");
   return (
     <section ref={ref} aria-labelledby="cat-title" className="min-w-0 flex-[1_1_400px] rounded-3xl border border-[#ebebef] bg-white p-4 sm:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 id="cat-title" className="text-base font-bold sm:text-lg">Para onde foi o dinheiro</h2>
+      {/* Título numa linha só; se os botões não couberem ao lado, descem juntos para a linha de baixo. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-3">
+        <div className="min-w-0">
+          <h2 id="cat-title" className="text-base font-bold whitespace-nowrap sm:text-lg">Para onde foi o dinheiro</h2>
           <p className="mt-1 text-[13px] text-zinc-600 first-letter:uppercase sm:text-sm">{monthName(d.month)}, por categoria</p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <Segmented
             size="sm"
             value={mode}

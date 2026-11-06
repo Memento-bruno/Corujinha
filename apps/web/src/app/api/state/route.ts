@@ -2,6 +2,7 @@ import { addMonths, isMonthKey, monthRange } from "@/lib/domain/months";
 import { getDatabase } from "@/lib/server/database";
 import { env, isAuthConfigured, isDemoMode, isDriveConfigured, isPluggyBlockedByMissingLogin, isPluggyConfigured } from "@/lib/server/env";
 import { handle, BadRequestError } from "@/lib/server/http";
+import { ensureOwnerPaysCards } from "@/lib/server/owner-pays";
 import { requireViewer } from "@/lib/server/session";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,8 @@ export async function GET(req: Request) {
   return handle(async () => {
     const viewer = await requireViewer();
     const db = await getDatabase();
+    // Uma vez só: compras de cartão já salvas passam a ser do dono da fatura.
+    await ensureOwnerPaysCards(db);
     const available = await db.listStatementMonths();
     const url = new URL(req.url);
     const requested = url.searchParams.get("month");
