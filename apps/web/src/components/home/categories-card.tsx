@@ -53,7 +53,7 @@ export function CategoriesCard() {
       {rows.length === 0 && <p className="mt-5 text-sm text-zinc-500">Nenhum gasto neste mês ainda.</p>}
       {mode === "donut" && rows.length > 0 && <Donut rows={rows} sum={sum} shown={shown} center={fmt.money(sum)} />}
       <ul className={`mt-5 flex flex-col gap-3.5 ${mode === "donut" ? "hidden" : ""}`}>
-        {rows.slice(0, 8).map(([cat, v], i) => {
+        {rows.map(([cat, v], i) => {
           const budget = d.config.sectorBudgets[cat];
           const over = budget !== undefined && v > budget;
           const meta = CATEGORIES[cat];
@@ -62,7 +62,7 @@ export function CategoriesCard() {
               <div className="flex justify-between gap-3 text-sm">
                 <span className="font-semibold">{meta.label}</span>
                 <span className="tabular">
-                  <b>{fmt.money(v)}</b> <span className="text-zinc-600">· {formatPct(Math.round((v / sum) * 100))}</span>
+                  <b>{fmt.money(v)}</b> <span className="text-zinc-600">· {formatPct(Math.round((v / sum) * 1000) / 10)}</span>
                 </span>
               </div>
               <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-zinc-100">
@@ -84,17 +84,17 @@ export function CategoriesCard() {
   );
 }
 
-/** Rosca por categoria (6 maiores + demais), preenchendo em sequência quando aparece na tela. */
+/** Rosca com todas as categorias do mês, preenchendo em sequência quando aparece na tela. */
 function Donut({ rows, sum, shown, center }: { rows: [CategoryId, number][]; sum: number; shown: boolean; center: string }) {
-  const top = rows.slice(0, 6).map(([c, v]) => ({ key: c as string, name: CATEGORIES[c].label, value: v, color: CATEGORIES[c].color }));
-  const rest = rows.slice(6).reduce((s, [, v]) => s + v, 0);
-  const data = rest > 0 ? [...top, { key: "rest", name: "Demais", value: rest, color: "#cbd5e1" }] : top;
+  const data = rows.map(([c, v]) => ({ key: c as string, name: CATEGORIES[c].label, value: v, color: CATEGORIES[c].color }));
   const R = 70;
   const C = 2 * Math.PI * R;
-  const GAP = data.length > 1 ? 3 : 0;
+  // Com muitas fatias o espaço entre elas fica menor, e fatias pequenas ganham um mínimo para não sumirem.
+  const GAP = data.length > 1 ? (data.length > 10 ? 1.5 : 3) : 0;
+  const MIN = data.length > 1 ? 1.5 : 0;
   let acc = 0;
   const segs = data.map((x, i) => {
-    const len = Math.max(0, (x.value / sum) * C - GAP);
+    const len = Math.max(MIN, (x.value / sum) * C - GAP);
     const seg = { ...x, len, offset: -acc, delay: (acc / C) * 900, dur: Math.max(120, (len / C) * 900), i };
     acc += (x.value / sum) * C;
     return seg;
@@ -125,10 +125,10 @@ function Donut({ rows, sum, shown, center }: { rows: [CategoryId, number][]; sum
           <span className="text-[11px] text-zinc-500">gasto no mês</span>
         </div>
       </div>
-      <ul className="mt-4 flex flex-col gap-2">
+      <ul className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-2">
         {data.map((x) => (
-          <li key={x.key} className="flex items-center gap-3 rounded-2xl border border-zinc-100 px-3 py-2.5">
-            <span className="size-2.5 rounded-full" style={{ background: x.color }} aria-hidden />
+          <li key={x.key} className="flex min-w-0 items-center gap-3 rounded-2xl border border-zinc-100 px-3 py-2">
+            <span className="size-2.5 shrink-0 rounded-full" style={{ background: x.color }} aria-hidden />
             <span className="flex-1 truncate text-sm font-medium">{x.name}</span>
             <span className="tabular rounded-lg bg-[#eef0ff] px-2 py-0.5 text-xs font-bold text-[#4f52d6]">{formatPct(Math.round((x.value / sum) * 1000) / 10)}</span>
           </li>
