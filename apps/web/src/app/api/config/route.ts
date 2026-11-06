@@ -31,6 +31,8 @@ export async function PUT(req: Request) {
     if (current.incomes?.[partner] !== undefined) incomes[partner] = current.incomes[partner];
     else delete incomes[partner];
     data.incomes = incomes;
+    // A conversão "compra é do dono da fatura" só roda uma vez: quem marca isso é o servidor.
+    if (current.ownerPaysCardsAt) data.ownerPaysCardsAt = current.ownerPaysCardsAt;
     return db.saveConfig(data, body.etag);
   });
 }

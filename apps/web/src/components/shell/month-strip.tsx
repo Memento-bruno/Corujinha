@@ -35,15 +35,19 @@ export function MonthStrip() {
   const d = useDerived();
   const [ref, drag] = useDragScroll<HTMLDivElement>();
   useEffect(() => {
-    const el = ref.current?.querySelector<HTMLElement>('[aria-current="true"]');
-    el?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    // Centraliza o mês aberto rolando só a faixa (scrollIntoView também rolava a página e a tela pulava).
+    const box = ref.current;
+    const el = box?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!box || !el) return;
+    const left = el.offsetLeft - box.offsetLeft - (box.clientWidth - el.offsetWidth) / 2;
+    box.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
   }, [d.month, ref]);
   return (
-    <nav aria-label="Escolher mês" className="min-w-0 max-w-full">
+    <nav aria-label="Escolher mês" className="flex min-w-0 max-w-full gap-1.5 rounded-[18px] border border-[#ebebef] bg-white p-1">
       <div
         ref={ref}
         {...drag}
-        className="no-scrollbar flex cursor-grab gap-1.5 overflow-x-auto rounded-[18px] border border-[#ebebef] bg-white p-1 select-none active:cursor-grabbing"
+        className="no-scrollbar -m-1 flex min-w-0 cursor-grab gap-1.5 overflow-x-auto p-1 select-none active:cursor-grabbing"
       >
         {d.strip.map((s, i) => {
           const selected = s.month === d.month;
@@ -68,16 +72,17 @@ export function MonthStrip() {
             </button>
           );
         })}
-        <button
-          type="button"
-          onClick={() => setMonth(d.openMonth)}
-          disabled={d.month === d.openMonth}
-          className="ml-1 flex h-12 shrink-0 items-center rounded-[14px] bg-[#4f52d6] px-3.5 text-sm font-bold text-white transition disabled:bg-zinc-100 disabled:text-zinc-400"
-          title="Voltar para a fatura em aberto"
-        >
-          Hoje
-        </button>
       </div>
+      {/* "Hoje" fica fora da parte que rola: sempre à vista, mesmo quando os meses não cabem. */}
+      <button
+        type="button"
+        onClick={() => setMonth(d.openMonth)}
+        disabled={d.month === d.openMonth}
+        className="ml-1 flex h-12 shrink-0 items-center rounded-[14px] bg-[#4f52d6] px-3.5 text-sm font-bold text-white transition disabled:bg-zinc-100 disabled:text-zinc-400"
+        title="Voltar para a fatura em aberto"
+      >
+        Hoje
+      </button>
     </nav>
   );
 }
