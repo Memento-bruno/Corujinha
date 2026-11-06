@@ -2,7 +2,10 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { PluggyError } from "../integrations/pluggy-client";
-import { ConflictError } from "./blob-store";
+import { ConflictError, StorageUnavailableError } from "./blob-store";
+import { BadRequestError, DRIVE_AUTH_MESSAGE, isDriveAuthError } from "./errors";
+
+export { BadRequestError, isDriveAuthError };
 import { UnauthorizedError } from "./session";
 
 /** Converte erros conhecidos em respostas HTTP sem vazar detalhes internos. */
@@ -11,6 +14,11 @@ export async function handle(fn: () => Promise<unknown>): Promise<NextResponse> 
     const body = await fn();
     return NextResponse.json(body ?? { ok: true }, { headers: { "Cache-Control": "no-store" } });
   } catch (e) {
+    const storage = asStorageError(e);
+    if (storage) {
+      console.error("[corujinha] armazenamento indisponível:", storage.code, (e as Error).message);
+      return NextResponse.json({ error: storage.message, code: storage.code }, { status: 503 });
+    }
     if (e instanceof UnauthorizedError) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     if (e instanceof ConflictError) {
       return NextResponse.json({ error: e.message, code: "CONFLICT" }, { status: 409 });
@@ -26,4 +34,10 @@ export async function handle(fn: () => Promise<unknown>): Promise<NextResponse> 
   }
 }
 
-export class BadRequestError extends Error {}
+
+
+function asStorageError(e: unknown): StorageUnavailableError | null {
+  if (e instanceof StorageUnavailableError) return e;
+  if (isDriveAuthError(e)) return new StorageUnavailableError(DRIVE_AUTH_MESSAGE, "DRIVE_AUTH");
+  return null;
+}

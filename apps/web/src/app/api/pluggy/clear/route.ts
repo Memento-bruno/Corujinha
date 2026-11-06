@@ -11,6 +11,8 @@ export async function POST() {
   return handle(async () => {
     await requireViewer();
     const db = await getDatabase();
+    // Cópia de tudo antes de apagar em massa (dá para voltar em Ajustes → Segurança).
+    await db.backup("antes-de-apagar-compras-do-banco");
     return clearPluggyTransactions(db);
   });
 }

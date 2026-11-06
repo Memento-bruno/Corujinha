@@ -45,3 +45,17 @@ export class KeyedMutex {
     }
   }
 }
+
+/**
+ * O armazenamento não pode ser usado agora (configuração faltando ou conexão com o Drive vencida).
+ * Vira 503 com um código que a tela usa para mostrar o que fazer.
+ */
+export class StorageUnavailableError extends Error {
+  constructor(
+    message: string,
+    public readonly code: "DRIVE_AUTH" | "DRIVE_MISSING",
+  ) {
+    super(message);
+    this.name = "StorageUnavailableError";
+  }
+}

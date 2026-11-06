@@ -9,7 +9,13 @@ import { getViewer } from "@/lib/server/session";
  * Só funciona com o login configurado e para um dos dois e-mails autorizados.
  * O token é mostrado UMA vez para ser colado em GOOGLE_DRIVE_REFRESH_TOKEN no .env.local.
  */
-export async function GET() {
+/**
+ * `?acesso=restrito`: pede só a permissão "arquivos que o próprio app criou" (drive.file) em vez do
+ * Drive inteiro. Se esse token vazar, ele não abre o resto do seu Drive. Na volta, o app testa se
+ * consegue ver e criar os arquivos da pasta com ela antes de você trocar o token na Vercel.
+ */
+export async function GET(req: Request) {
+  const restricted = new URL(req.url).searchParams.get("acesso") === "restrito";
   if (!isAuthConfigured()) {
     return NextResponse.json({ error: "Configure o login Google primeiro (GOOGLE_CLIENT_ID/SECRET, AUTH_SECRET)." }, { status: 400 });
   }
@@ -21,11 +27,11 @@ export async function GET() {
   const url = client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: ["https://www.googleapis.com/auth/drive"],
+    scope: [restricted ? "https://www.googleapis.com/auth/drive.file" : "https://www.googleapis.com/auth/drive"],
     state,
     login_hint: viewer.email ?? undefined,
   });
   const res = NextResponse.redirect(url);
-  res.cookies.set("corujinha_drive_state", state, { httpOnly: true, sameSite: "lax", secure: env.appUrl.startsWith("https"), maxAge: 600, path: "/api/drive" });
+  res.cookies.set("corujinha_drive_state", `${state}${restricted ? ":r" : ""}`, { httpOnly: true, sameSite: "lax", secure: env.appUrl.startsWith("https"), maxAge: 600, path: "/api/drive" });
   return res;
 }

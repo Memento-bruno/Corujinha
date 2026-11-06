@@ -13,6 +13,7 @@ import { Card, CardHeader } from "../ui/card";
 import { Input, Label, Select } from "../ui/field";
 import { IconBox } from "../ui/icon-box";
 import { Sheet } from "../ui/sheet";
+import { BackupsCard } from "./backups-card";
 import { MerchantsCard } from "./merchants-card";
 import { OpenFinanceCard } from "./open-finance-card";
 import { SubscriptionsCard } from "./subscriptions-card";
@@ -311,6 +312,8 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
 
       <OpenFinanceCard config={cfg} />
 
+      {mode.storage === "drive" && <BackupsCard />}
+
       <Card id="seguranca">
         <CardHeader icon={<IconBox>{mode.storage === "drive" ? <CloudCheck /> : <HardDrive />}</IconBox>} title="Armazenamento e segurança" />
         <ul className="space-y-2 text-sm">
@@ -320,9 +323,14 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
           <li className="flex justify-between gap-3"><span className="text-zinc-500">Drive configurado</span><b>{mode.driveConfigured ? "Sim" : "Não"}</b></li>
         </ul>
         <div className="mt-4 flex flex-wrap gap-2">
-          {mode.authConfigured && !mode.driveConfigured && (
+          {mode.authConfigured && (
             <Button variant="outline" size="sm" asChild>
-              <a href="/api/drive/connect"><KeyRound /> Gerar refresh token do Drive</a>
+              <a href="/api/drive/connect"><KeyRound /> {mode.driveConfigured ? "Renovar conexão com o Drive" : "Gerar refresh token do Drive"}</a>
+            </Button>
+          )}
+          {mode.authConfigured && (
+            <Button variant="ghost" size="sm" asChild>
+              <a href="/api/drive/connect?acesso=restrito"><ShieldCheck /> Testar acesso menor ao Drive</a>
             </Button>
           )}
           {mode.storage === "local" && (

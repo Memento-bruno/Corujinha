@@ -85,21 +85,13 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   if (okItems === 0) return summary;
 
   // Salva cartões novos antes das transações que apontam para eles (relendo para não sobrescrever edições).
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const latest = await db.getConfig();
-    const known = new Set(latest.data.cards.map((c) => c.id));
-    const next = {
-      ...latest.data,
-      cards: [...latest.data.cards, ...cfg.cards.filter((c) => !known.has(c.id))],
-      pluggyLastSyncAt: new Date().toISOString(),
-    };
-    try {
-      await db.saveConfig(next, latest.etag);
-      break;
-    } catch (e) {
-      if (!(e instanceof ConflictError) || attempt === 2) throw e;
-    }
-  }
+  // A data da sincronização só é gravada no FIM: se algo falhar no meio (tempo esgotado, conflito),
+  // a primeira sincronização automática tenta de novo na próxima abertura em vez de ficar pela metade.
+  const newCards = cfg.cards.filter((c) => !cfgV.data.cards.some((k) => k.id === c.id));
+  if (newCards.length) await saveConfigWith(db, (latest) => {
+    const known = new Set(latest.cards.map((c) => c.id));
+    return { ...latest, cards: [...latest.cards, ...newCards.filter((c) => !known.has(c.id))] };
+  });
   // Passa por todos os meses da janela (inclusive os que ficaram vazios), até 2 meses à frente.
   const lastMonth = addMonths(monthOf(new Date()), 2);
   const months = new Set<MonthKey>([...byMonth.keys(), ...billsByMonth.keys()]);
@@ -113,10 +105,14 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   // Compra do banco de uma conexão que não existe mais (ou de cartão que nenhuma conexão trouxe).
   const isOrphan = (t: Transaction) =>
     allClean && t.source === "pluggy" && (t.pluggyItemId ? !itemIds.has(t.pluggyItemId) : !syncedCardIds.has(t.cardId));
-  for (const month of [...months].sort()) {
+  // Lê todos os meses de uma vez (em paralelo): a sincronização tem 60 s na Vercel.
+  await db.prime();
+  const sortedMonths = [...months].sort();
+  const firstRead = new Map(await Promise.all(sortedMonths.map(async (m) => [m, await db.getStatement(m)] as const)));
+  for (const month of sortedMonths) {
     const incoming = (byMonth.get(month) ?? []).map((t) => applyCardRecurring(debts, applyMerchantRule(cfg.merchantRules, t)));
     for (let attempt = 0; attempt < 3; attempt++) {
-      const cur = await db.getStatement(month);
+      const cur = attempt === 0 ? firstRead.get(month)! : await db.getStatement(month);
       if (cur.data.snapshot) {
         if (incoming.length) summary.skippedClosedMonths.push(month);
         break;
@@ -144,7 +140,22 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
     }
   }
 
+  // Tudo gravado: agora sim marca que a sincronização terminou.
+  await saveConfigWith(db, (latest) => ({ ...latest, pluggyLastSyncAt: new Date().toISOString() }));
   return summary;
+}
+
+/** Grava o cadastro aplicando `fn` na versão mais nova (relê e tenta de novo se outro gravou antes). */
+async function saveConfigWith(db: DriveDatabaseService, fn: (c: HouseholdConfig) => HouseholdConfig) {
+  for (let attempt = 0; ; attempt++) {
+    const latest = await db.getConfig();
+    try {
+      await db.saveConfig(fn(latest.data), latest.etag);
+      return;
+    } catch (e) {
+      if (!(e instanceof ConflictError) || attempt >= 2) throw e;
+    }
+  }
 }
 
 /** Apaga as compras que vieram do banco (Open Finance) dos meses abertos. Meses fechados ficam como estão. */
