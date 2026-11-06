@@ -182,6 +182,12 @@ export class DriveBlobStore implements BlobStore {
     if (ours <= 0) return;
     const before = revisions[ours - 1];
     if (!before.md5Checksum || before.md5Checksum === expectedEtag || !before.id) return;
+    // Só é gravação de outro servidor se a versão que lemos aparece ANTES dela no histórico. O histórico
+    // do Drive demora alguns segundos para mostrar as versões novas: quando a pessoa toca vários botões
+    // seguidos, a versão que acabamos de gravar ainda pode não estar lá. Sem isso, o servidor achava que
+    // era conflito e devolvia uma versão mais velha, desfazendo a mudança anterior sem avisar.
+    const expectedAt = revisions.findLastIndex((r, i) => i < ours - 1 && r.md5Checksum === expectedEtag);
+    if (expectedAt < 0) return;
     // A gravação de outra pessoa ficou por baixo da nossa. Se a nossa ainda é a última, devolve a dela.
     console.warn(`[corujinha] gravação simultânea em ${name}: devolvendo a outra versão e pedindo para juntar.`);
     if (ours === revisions.length - 1) {

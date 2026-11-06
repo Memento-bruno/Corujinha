@@ -129,6 +129,14 @@ function comparable(data: unknown): string {
   return JSON.stringify(strip(data, true));
 }
 
+/** `a` foi gravado antes de `b` (pelo horário que o servidor carimba em cada gravação)? */
+function isOlder(a: unknown, b: unknown): boolean {
+  const at = (x: unknown) => (x && typeof x === "object" ? (x as { updatedAt?: unknown }).updatedAt : undefined);
+  const ta = at(a);
+  const tb = at(b);
+  return typeof ta === "string" && typeof tb === "string" && ta < tb;
+}
+
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -457,7 +465,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!s) return s;
         let out = s;
         changed.forEach((slot, i) => {
-          if (slot.get(s)?.etag === slot.get(now)?.etag) out = slot.set(out, fresh[i]);
+          const mine = slot.get(s);
+          if (mine?.etag !== slot.get(now)?.etag) return;
+          // A listagem do Drive às vezes fica alguns segundos atrasada e devolve a versão de antes da
+          // nossa última gravação: nunca troca o que está na tela por uma versão mais velha.
+          if (isOlder(fresh[i].data, mine?.data)) return;
+          out = slot.set(out, fresh[i]);
         });
         return out;
       });
