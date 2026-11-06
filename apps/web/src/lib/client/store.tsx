@@ -329,27 +329,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [reload, toast],
   );
 
+  // Edições de cada arquivo que ainda não foram para o Drive, na ordem dos toques.
+  const waiting = useRef(new Map<string, { fn: (d: unknown) => unknown; done: (ok: boolean) => void }[]>());
+  // Última versão confirmada pelo servidor de cada arquivo com edição pendente (a tela mostra ela + as pendentes).
+  const confirmed = useRef(new Map<string, Versioned<unknown>>());
+  const inflight = useRef(new Set<string>());
+
+  /** Mostra na tela a versão do servidor com as edições que ainda estão esperando. */
+  const show = useCallback(
+    <T,>(slot: Slot<T>, base: Versioned<T>) => {
+      const rest = (waiting.current.get(slot.file) ?? []) as { fn: (d: T) => T }[];
+      const data = rest.reduce((d, w) => w.fn(d), base.data);
+      commit((s) => (s ? slot.set(s, { data, etag: base.etag }) : s));
+    },
+    [commit],
+  );
+
   /**
-   * Grava um arquivo aplicando `fn` na versão mais nova. Se outro aparelho (ou a sincronização
-   * com o banco) gravou antes, busca a versão nova, aplica a mesma edição em cima dela e tenta
-   * de novo, em vez de descartar o que a pessoa fez.
+   * Grava um arquivo aplicando `fn` na versão mais nova. A mudança aparece na tela na hora do toque;
+   * a gravação vai para a fila. Vários toques seguidos no mesmo arquivo viram UMA gravação (com o
+   * Drive levando segundos por gravação, cada toque esperava os anteriores e parecia travado).
+   * Se outro aparelho (ou a sincronização com o banco) gravou antes, busca a versão nova, aplica as
+   * mesmas edições em cima dela e tenta de novo, em vez de descartar o que a pessoa fez.
    */
-  const save = useCallback(
-    <T,>(slot: Slot<T>, fn: (d: T) => T): Promise<boolean> =>
-      enqueue(async () => {
-        let base = slot.get(stateRef.current);
-        if (!base) return false;
+  const flush = useCallback(
+    async <T,>(slot: Slot<T>): Promise<void> => {
+      const batch = (waiting.current.get(slot.file) ?? []) as { fn: (d: T) => T; done: (ok: boolean) => void }[];
+      if (!batch.length) return;
+      waiting.current.set(slot.file, []);
+      inflight.current.add(slot.file);
+      const finish = (ok: boolean) => batch.forEach((w) => w.done(ok));
+      try {
+        let base = (confirmed.current.get(slot.file) as Versioned<T> | undefined) ?? slot.get(stateRef.current);
+        if (!base) return finish(false);
         setSync("saving");
         let networkRetries = 0;
         for (let attempt = 0; ; attempt++) {
-          const next = fn(base.data);
+          const next = batch.reduce((d, w) => w.fn(d), base.data);
           const etag = base.etag;
-          commit((s) => (s ? slot.set(s, { data: next, etag }) : s));
+          show(slot, { data: next, etag });
           try {
             const r = await api<Versioned<T>>(slot.url, { method: "PUT", body: JSON.stringify({ data: next, etag }) });
-            commit((s) => (s ? slot.set(s, r) : s));
+            confirmed.current.set(slot.file, r);
+            show(slot, r);
             setSync("synced");
-            return true;
+            return finish(true);
           } catch (e) {
             // Sinal ruim: espera um pouco e tenta de novo em vez de desfazer a edição.
             if (isTransient(e) && networkRetries < MAX_NETWORK_RETRIES) {
@@ -361,11 +385,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 const fresh = await api<Versioned<T>>(slot.url);
                 if (fresh.etag !== etag) {
                   if (comparable(fresh.data) === comparable(next)) {
-                    commit((s) => (s ? slot.set(s, fresh) : s));
+                    confirmed.current.set(slot.file, fresh);
+                    show(slot, fresh);
                     setSync("synced");
-                    return true;
+                    return finish(true);
                   }
                   base = fresh; // outro aparelho gravou no meio: junta a edição com a versão dele
+                  confirmed.current.set(slot.file, fresh);
                 }
               } catch {
                 /* ainda sem conexão: tenta gravar de novo assim mesmo */
@@ -375,18 +401,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (e instanceof HttpError && e.status === 409 && attempt < MAX_MERGE_ATTEMPTS) {
               try {
                 base = await api<Versioned<T>>(slot.url);
+                confirmed.current.set(slot.file, base);
                 continue;
               } catch (e2) {
                 await handleError(e2);
-                return false;
+                return finish(false);
               }
             }
             await handleError(e);
-            return false;
+            return finish(false);
           }
         }
-      }),
-    [enqueue, handleError, commit, toast],
+      } finally {
+        inflight.current.delete(slot.file);
+        if (!waiting.current.get(slot.file)?.length) confirmed.current.delete(slot.file);
+      }
+    },
+    [handleError, show, toast],
+  );
+
+  const save = useCallback(
+    <T,>(slot: Slot<T>, fn: (d: T) => T): Promise<boolean> => {
+      const cur = slot.get(stateRef.current);
+      if (!cur) return Promise.resolve(false);
+      const list = waiting.current.get(slot.file) ?? [];
+      // Primeira edição pendente deste arquivo: o que está na tela é a versão do servidor.
+      if (!list.length && !inflight.current.has(slot.file)) confirmed.current.set(slot.file, cur);
+      return new Promise<boolean>((resolve) => {
+        list.push({ fn: fn as (d: unknown) => unknown, done: resolve });
+        waiting.current.set(slot.file, list);
+        // Aparece na hora, sem esperar a fila.
+        commit((s) => {
+          const now = s ? slot.get(s) : undefined;
+          return s && now ? slot.set(s, { data: fn(now.data), etag: now.etag }) : s;
+        });
+        void enqueue(() => flush(slot));
+      });
+    },
+    [enqueue, flush, commit],
   );
 
   const updateStatement = useCallback(
