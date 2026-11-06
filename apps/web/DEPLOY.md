@@ -62,3 +62,15 @@ que vencem hoje ou daqui a 3 dias e ainda não foram marcadas com **Já paguei**
      Sem domínio próprio, a Resend só entrega para o e-mail dono da conta Resend.
 3. Faça **Redeploy**. A tarefa agendada já está no `vercel.json` (`/api/cron/lembretes`, 11:00 UTC).
 4. Cada um pode desligar o próprio lembrete em **Configurações → Contas e vencimentos**.
+
+## 9. Cópia de segurança automática (recomendado)
+Todo domingo de manhã o app guarda sozinho uma cópia de tudo na pasta do Drive (se não houver outra da última semana).
+Usa o mesmo `CRON_SECRET` do passo 8: se ele já está na Vercel, não precisa fazer nada além do **Redeploy**.
+Sem a Resend, dá para colocar só o `CRON_SECRET` (os lembretes ficam desligados e a cópia funciona).
+
+## 10. Antes de começar a usar no dia a dia
+Abra **Configurações → Pronto para o casal**. O cartão mostra, item por item, o que já está certo e o que falta
+(login só de vocês dois, Drive, nome e primeiro acesso da segunda pessoa, bancos de cada um, cópia semanal, lembretes).
+
+Se algo der errado numa tela, o erro fica guardado em **Configurações → Erros do app**. Toque em **Copiar erros**
+e cole na conversa para corrigir. O registro não guarda valores, e-mails nem números de cartão.

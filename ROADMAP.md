@@ -80,6 +80,28 @@ Ajustes → Open Finance → "Conferir valores com o banco". O app sincroniza so
 (no máximo a cada 6h) e há um botão em Faturas → Importar. O importador de arquivos continua valendo para
 bancos que não estejam no Open Finance.
 
+## Uso do casal no dia a dia
+
+- **Configurações → Pronto para o casal**: checklist do que falta (login dos dois, Drive, primeiro acesso,
+  bancos de cada um, cópia semanal, lembretes, instalação no celular).
+- **Configurações → Erros do app**: erros da tela e do servidor, guardados criptografados no Drive, sem valores.
+  "Copiar erros" gera o texto para mandar para correção.
+- **Cópia de segurança semanal** (`/api/cron/copia`, domingo 07:00 UTC, precisa de `CRON_SECRET`).
+
+## Próximos recursos (ideias, aguardando escolha)
+
+Todas seguem as regras do app: somente leitura para dinheiro e sugestões por regras, sem IA.
+
+1. **Notificação no celular (push do próprio app)**: avisos de vencimento e de compra nova sem precisar da Resend.
+2. **Objetivos do casal**: viagem, reforma, reserva. Valor alvo, data e quanto já guardaram (marcado à mão).
+3. **Dinheiro livre de cada um**: um valor por mês para gastos pessoais, sem o outro ver o detalhe, só se estourou.
+4. **Compra surpresa**: marcar uma compra como presente; ela fica escondida do outro até a data escolhida.
+5. **Calendário de vencimentos**: mês em forma de calendário com faturas, contas fixas e parcelas que acabam.
+6. **Retrospectiva do mês e do ano**: ao fechar o mês, um resumo com maiores gastos, categorias que subiram e
+   quanto cada um pagou.
+7. **Lista de desejos compartilhada**: itens com preço e prioridade, e o app mostra em que mês cabe na meta.
+8. **Divisão pela renda, automática**: a divisão padrão se ajusta sozinha à proporção dos salários cadastrados.
+
 ## Segurança (resumo)
 
 - Somente 2 contas Google conseguem entrar; toda rota de API revalida a sessão no servidor.

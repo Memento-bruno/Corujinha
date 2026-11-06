@@ -15,7 +15,29 @@ export const FILES = {
   recurring: "recurring-debts.json",
   statement: (month: MonthKey) => `statements-${month}.json`,
   backupPrefix: "backup-",
+  errorLog: "error-log.json",
 };
+
+/** Um erro que aconteceu no app (na tela de alguém ou no servidor). Guardado criptografado, sem valores. */
+export interface ErrorLogEntry {
+  /** Primeira vez que apareceu. */
+  at: string;
+  /** Última vez (o mesmo erro repetido só soma em `count`). */
+  lastAt: string;
+  count: number;
+  where: "tela" | "servidor";
+  user?: "USER_A" | "USER_B";
+  message: string;
+  /** Tela ou rota onde aconteceu (sem parâmetros de URL). */
+  path?: string;
+  detail?: string;
+}
+
+export interface ErrorLogFile {
+  schemaVersion: 1;
+  entries: ErrorLogEntry[];
+  updatedAt: string;
+}
 
 /** Quantas cópias de segurança guardar (as mais antigas vão para a lixeira do Drive). */
 const KEEP_BACKUPS = 15;
@@ -122,6 +144,19 @@ export class DriveDatabaseService {
   async saveStatement(file: StatementFile, etag: string | null) {
     if (!isMonthKey(file.month)) throw new Error("Mês inválido");
     return this.writeJson(FILES.statement(file.month), { ...file, updatedAt: new Date().toISOString() }, etag);
+  }
+
+  async getErrorLog(): Promise<Versioned<ErrorLogFile>> {
+    return (
+      (await this.readJson<ErrorLogFile>(FILES.errorLog)) ?? {
+        data: { schemaVersion: 1, entries: [], updatedAt: new Date(0).toISOString() },
+        etag: null,
+      }
+    );
+  }
+
+  async saveErrorLog(file: ErrorLogFile, etag: string | null) {
+    return this.writeJson(FILES.errorLog, { ...file, updatedAt: new Date().toISOString() }, etag);
   }
 
   /** ETag atual de cada arquivo, numa só consulta (para os aparelhos verem o que mudou). */

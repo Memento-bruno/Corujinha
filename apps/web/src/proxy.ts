@@ -18,6 +18,7 @@ export default auth((req) => {
     pathname === "/api/webhooks/pluggy" ||
     // Tarefa agendada da Vercel; protegida pelo CRON_SECRET no cabeçalho.
     pathname === "/api/cron/lembretes" ||
+    pathname === "/api/cron/copia" ||
     pathname === "/manifest.webmanifest" ||
     pathname === "/sw.js";
   if (isPublic) return NextResponse.next();

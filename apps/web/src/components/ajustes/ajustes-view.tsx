@@ -16,6 +16,8 @@ import { IconBox } from "../ui/icon-box";
 import { Sheet } from "../ui/sheet";
 import { BackupsCard } from "./backups-card";
 import { ClosingCard } from "./closing-card";
+import { ErrorsCard } from "./errors-card";
+import { ReadinessCard } from "./readiness-card";
 import { Switch } from "../ui/switch";
 import { MerchantsCard } from "./merchants-card";
 import { OpenFinanceCard } from "./open-finance-card";
@@ -24,6 +26,7 @@ import { RecurringTab } from "../faturas/recurring-tab";
 import { ValueMode } from "../shell/value-mode";
 
 const SECTIONS = [
+  ["pronto", "Pronto?"],
   ["casal", "Casal"],
   ["renda", "Renda"],
   ["metas", "Meta e tetos"],
@@ -34,6 +37,7 @@ const SECTIONS = [
   ["valores", "Valores"],
   ["open-finance", "Banco"],
   ["seguranca", "Segurança"],
+  ["erros", "Erros"],
 ] as const;
 
 /** Renda do casal: cada um coloca o próprio salário líquido. O valor nunca aparece em outra tela, só porcentagens. */
@@ -268,6 +272,8 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
         ))}
       </nav>
 
+      <ReadinessCard mode={mode} cfg={cfg} />
+
       <Card id="casal">
         <CardHeader icon={<IconBox><Users /></IconBox>} title="Casal e divisão padrão" />
         <div className="grid gap-3 sm:grid-cols-2">
@@ -465,12 +471,7 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
         </div>
       </Card>
 
-
-
-
-
-
-
+      {!mode.demo && <ErrorsCard cfg={cfg} />}
 
       <p className="flex items-center justify-center gap-1.5 pb-4 text-center text-[11px] text-zinc-400">
         <ShieldCheck className="size-3.5" /> Somente leitura: o Corujinha nunca faz pagamentos, Pix ou transferências.
