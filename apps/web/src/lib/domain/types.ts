@@ -126,7 +126,16 @@ export interface HouseholdConfig {
    * Sem isso, o servidor converte os meses abertos na próxima abertura do app.
    */
   ownerPaysCardsAt?: string;
+  /** Modo fechamento: tudo até esta data ficou fechado (gravado só pelo servidor, em /api/fechamento). */
+  closing?: ClosingCutoff;
   updatedAt: string;
+}
+
+export interface ClosingCutoff {
+  /** Último dia fechado ("YYYY-MM-DD"), inclusive. */
+  date: string;
+  closedAt: string;
+  closedBy: UserId;
 }
 
 export interface MerchantRule {

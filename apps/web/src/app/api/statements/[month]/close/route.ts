@@ -7,6 +7,7 @@ import { getDatabase } from "@/lib/server/database";
 import { BadRequestError, handle } from "@/lib/server/http";
 import { etagSchema } from "@/lib/server/schemas";
 import { requireViewer } from "@/lib/server/session";
+import { debtsAfterClosing, openTxs } from "@/lib/domain/closing";
 
 /**
  * "Fechar Mês": recalcula o encontro de contas NO SERVIDOR (não confia no cliente)
@@ -25,13 +26,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ month: string 
       return db.saveStatement({ ...statement.data, snapshot: undefined }, body.etag);
     }
     if (statement.data.snapshot) throw new BadRequestError("Este mês já está fechado.");
-    const debts = recurring.data.debts;
-    const settlement = settleMonth(month, statement.data.transactions, debts, config.data.defaultSplitPercentA);
+    // O que ficou no fechamento por data já foi acertado: não entra.
+    const closing = config.data.closing;
+    const debts = debtsAfterClosing(recurring.data.debts, closing);
+    const txs = openTxs(statement.data.transactions, month, closing);
+    const settlement = settleMonth(month, txs, debts, config.data.defaultSplitPercentA);
     const snapshot = {
       closedAt: new Date().toISOString(),
       closedBy: viewer.userId,
       settlement,
-      totalStatements: sumCents(withPredicted(debts, month, statement.data.transactions)),
+      totalStatements: sumCents(openTxs(withPredicted(debts, month, txs), month, closing)),
       totalRecurring: sumCents(recurringToExpenses(debts, month)),
     };
     return db.saveStatement({ ...statement.data, snapshot }, body.etag);

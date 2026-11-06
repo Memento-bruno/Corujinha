@@ -11,6 +11,7 @@ import { alwaysSplitOf, learnMerchant, propagateToSameMerchant, setMerchantAlway
 import { isSamePurchase } from "@/lib/engines/installments";
 import { cardRecurringFor } from "@/lib/engines/recurring";
 import { cn } from "@/lib/utils";
+import { closingLabel } from "@/lib/domain/closing";
 import { PERSON } from "../home/colors";
 import { MerchantLogo } from "../home/merchant-logo";
 import { Switch } from "../ui/switch";
@@ -374,6 +375,12 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
         <p className="mt-3 rounded-2xl bg-zinc-50 px-3.5 py-2.5 text-sm text-zinc-600">
           Toda compra entra como do <b>dono da fatura</b>. Toque numa compra para mudar <b>de quem é</b> (vale só para ela) e a <b>categoria</b>.
           Loja que é sempre dos dois? Abra a compra e ligue <b>Sempre dividir</b>.
+        </p>
+      )}
+
+      {d.closing && d.lockedCount > 0 && (
+        <p className="mt-2 flex items-center gap-2 rounded-2xl bg-zinc-50 px-3.5 py-2.5 text-sm text-zinc-600">
+          <Lock className="size-4 shrink-0" /> {d.lockedCount} compra{d.lockedCount === 1 ? "" : "s"} até {closingLabel(d.closing)} ficaram no fechamento (já acertadas) e não entram nas contas.
         </p>
       )}
 

@@ -64,6 +64,28 @@ describe("syncPluggy", () => {
   });
 });
 
+describe("modo fechamento", () => {
+  it("não traz compras até a data e não mexe nas já gravadas", async () => {
+    const { syncPluggy, clearPluggyTransactions } = await import("./pluggy-sync");
+    // Fecha no dia 02 do mês atual: a compra do mês passado (dia 20) fica de fora; a do dia 03 entra.
+    const cfg = await db.getConfig();
+    await db.saveConfig({ ...cfg.data, closing: { date: `${thisMonth}-02`, closedAt: "x", closedBy: "USER_A" } }, cfg.etag);
+    const r = await syncPluggy(db, 3);
+    expect(r.added).toBe(1);
+    expect((await db.getStatement(lastMonth)).data.transactions).toHaveLength(0);
+    expect((await db.getStatement(thisMonth)).data.transactions.map((t) => t.externalId)).toEqual(["pluggy:t1"]);
+
+    // Compra fechada já gravada (de antes do fechamento): a sincronização e o "apagar" não tocam nela.
+    const s = await db.getStatement(thisMonth);
+    const old = { ...s.data.transactions[0], id: "velha", externalId: "sumiu-do-banco", date: `${thisMonth}-01`, description: "Editada" };
+    await db.saveStatement({ ...s.data, transactions: [old, ...s.data.transactions] }, s.etag);
+    await syncPluggy(db, 3);
+    expect((await db.getStatement(thisMonth)).data.transactions.find((t) => t.id === "velha")).toMatchObject({ description: "Editada" });
+    await clearPluggyTransactions(db);
+    expect((await db.getStatement(thisMonth)).data.transactions.map((t) => t.id)).toEqual(["velha"]);
+  });
+});
+
 describe("clearPluggyTransactions", () => {
   it("apaga só as compras do banco", async () => {
     const { syncPluggy, clearPluggyTransactions } = await import("./pluggy-sync");
