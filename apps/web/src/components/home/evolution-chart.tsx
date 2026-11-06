@@ -35,7 +35,8 @@ export function EvolutionChart() {
   const data = d.timeline;
   const max = niceMax(Math.max(...data.map((m) => m.total)) * 1.15);
   const n = data.length;
-  const xs = data.map((_, i) => 7 + (i * 89) / (n - 1));
+  // Começa em 11% para o primeiro ponto não cair em cima dos números do eixo (à esquerda).
+  const xs = data.map((_, i) => 11 + (i * 85) / (n - 1));
   const ys = data.map((m) => 100 - (m.total / max) * 100);
   const pts = data.map((_, i) => [xs[i], ys[i]] as [number, number]);
   const lastReal = data.findLastIndex((m) => !m.forecast);
@@ -101,6 +102,8 @@ export function EvolutionChart() {
         </svg>
         {data.map((m, i) => {
           const sel = m.month === d.month;
+          // Ponto mais baixo que os vizinhos (um "vale"): a linha chega por cima, então o número vai embaixo do ponto.
+          const valley = (i === 0 || ys[i] > ys[i - 1]) && (i === n - 1 || ys[i] > ys[i + 1]) && n > 1 && ys[i] < 85;
           return (
             <div
               key={m.month}
@@ -113,7 +116,7 @@ export function EvolutionChart() {
                 style={{ left: `${xs[i]}%`, top: `${ys[i]}%`, borderColor: m.forecast ? "#8b8ff5" : "#4f52d6", ...(sel ? { width: 16, height: 16, background: "#4f52d6" } : {}) }}
               />
               <span
-                className={`tabular absolute -translate-x-1/2 -translate-y-[calc(100%+10px)] text-[10px] font-bold whitespace-nowrap sm:text-[11px] ${m.forecast ? "text-zinc-500" : "text-zinc-900"} ${i % 2 && !sel ? "hidden sm:block" : ""}`}
+                className={`tabular absolute -translate-x-1/2 ${valley ? "translate-y-[12px]" : "-translate-y-[calc(100%+10px)]"} text-[10px] font-bold whitespace-nowrap sm:text-[11px] ${m.forecast ? "text-zinc-500" : "text-zinc-900"} ${i % 2 && !sel ? "hidden sm:block" : ""}`}
                 style={{ left: `${xs[i]}%`, top: `${ys[i]}%` }}
               >
                 {fmt.num(m.total)}
