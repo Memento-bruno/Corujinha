@@ -252,14 +252,15 @@ function Simulator() {
         {!fmt.privacy && <p className="mt-2 text-xs text-zinc-400">Fatura simulada: <span className="tabular font-semibold text-white">{fmt.money(result.newTotal)}</span></p>}
       </div>
       {[
-        { title: "Assinaturas", icon: <Repeat className="size-3.5" />, items: subs },
-        { title: "Gastos variáveis", icon: <Bug className="size-3.5" />, items: vars },
+        { title: "Assinaturas e recorrentes", icon: <Repeat className="size-3.5" />, items: subs, empty: "Nada que se repete todo mês nesta fatura." },
+        { title: "Gastos variáveis", icon: <Bug className="size-3.5" />, items: vars, empty: "Nenhum gasto variável nesta fatura." },
       ].map((g) => (
         <div key={g.title} className="mb-3">
           <p className="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] font-semibold tracking-wide text-zinc-400 uppercase">
             {g.icon} {g.title}
           </p>
-          <ul className="divide-y divide-slate-100 rounded-2xl border border-slate-100">
+          {g.items.length === 0 && <p className="px-1 text-xs text-zinc-400">{g.empty}</p>}
+          <ul className={cn("divide-y divide-slate-100 rounded-2xl border border-slate-100", g.items.length === 0 && "hidden")}>
             {g.items.map((c) => (
               <li key={c.id}>
                 <label className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50">

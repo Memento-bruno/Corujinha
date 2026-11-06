@@ -14,7 +14,7 @@ import {
   sectorTotals,
   sumCents,
 } from "../engines/analytics";
-import { RuleBasedSavingsEngine } from "../engines/savings";
+import { RuleBasedSavingsEngine, cardRecurringMerchants, repeatedMerchants } from "../engines/savings";
 import { withPredicted } from "../engines/recurring";
 import { recurringToExpenses, settleMonth, splitAmount } from "../engines/settlement";
 import {
@@ -172,7 +172,12 @@ function useDerivedOptional() {
     const prevFinHealth = prevSpend.status === "empty" ? null : healthOf(prevMonth, prevSpend.total, prevInstallments);
     const engine = new RuleBasedSavingsEngine({ month, byMonth, config: cfg });
     const recommendations = engine.analyze();
-    const candidates = engine.simulatorCandidates();
+    // Simulador: o que se repete conta como recorrente. O padrão vem do histórico completo
+    // (o fechamento só tira valores das contas, não apaga o costume de comprar ali).
+    const history: Record<MonthKey, Transaction[]> = Object.fromEntries(Object.entries(statements).map(([m, s]) => [m, s.data.transactions]));
+    const candidates = engine.simulatorCandidates(
+      new Set([...repeatedMerchants(history, month), ...cardRecurringMerchants(recurring.data.debts)]),
+    );
     const suggestedSubscriptions = detectRecurringMerchants(byMonth, month, 3).filter((key) => {
       const t = allTxs.find((x) => x.merchantKey === key);
       return t && !isSubscription(t, cfg);

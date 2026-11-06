@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { demoConfig, demoStatements } from "../demo/seed";
 import { monthRange } from "../domain/months";
 import type { Transaction } from "../domain/types";
-import { RuleBasedSavingsEngine, simulateCuts } from "./savings";
+import { RuleBasedSavingsEngine, repeatedMerchants, simulateCuts } from "./savings";
 import { detectRecurringMerchants, healthScore, projectInstallments } from "./analytics";
 
 const END = "2026-10";
@@ -60,6 +60,48 @@ describe("RuleBasedSavingsEngine com os dados de demonstração", () => {
     const r = simulateCuts(c, pick, 100000);
     expect(r.savings).toBe(c[0].monthlyAmount + c[1].monthlyAmount);
     expect(r.pctOfInvoice).toBeCloseTo((r.savings / 100000) * 100);
+  });
+});
+
+describe("simulador: assinaturas e recorrentes", () => {
+  const tx = (id: string, date: string, merchantKey: string, amount: number, extra: Partial<Transaction> = {}): Transaction => ({
+    id,
+    date,
+    description: merchantKey.toUpperCase(),
+    merchantKey,
+    amount,
+    cardId: "c1",
+    paidBy: "USER_A",
+    category: "servicos",
+    tags: [],
+    split: { mode: "DEFAULT" },
+    source: "manual",
+    ...extra,
+  } as Transaction);
+  const hist = {
+    "2026-09": [tx("a", "2026-09-05", "nutag", 7000), tx("b", "2026-09-07", "academia", 12000)],
+    "2026-10": [
+      tx("c", "2026-10-05", "nutag", 7288),
+      tx("d", "2026-10-07", "academia", 12000),
+      tx("e", "2026-10-09", "pedagio novo", 900),
+      tx("f", "2026-10-10", "mercado x", 30000, { category: "mercado" }),
+      tx("p", "2026-10-15", "conta luz", 15000, { predictedFrom: "r1", tags: ["Prevista"] }),
+    ],
+  };
+
+  it("loja que já apareceu antes conta como recorrente, mesmo de setor essencial", () => {
+    const rec = repeatedMerchants(hist, "2026-10");
+    expect([...rec].sort()).toEqual(["academia", "nutag"]);
+    const c = new RuleBasedSavingsEngine({ month: "2026-10", byMonth: hist, config }).simulatorCandidates(rec);
+    const subs = c.filter((x) => x.kind === "subscription").map((x) => x.id).sort();
+    expect(subs).toEqual(["s|academia", "s|conta luz", "s|nutag"]);
+    // essencial e sem repetição continua fora
+    expect(c.some((x) => x.id.endsWith("mercado x"))).toBe(false);
+  });
+
+  it("muitas compras no mês na mesma loja ficam em gastos variáveis", () => {
+    const many = { ...hist, "2026-10": [1, 2, 3, 4].map((i) => tx(`i${i}`, "2026-10-1" + i, "ifood", 3000, { category: "delivery" })), "2026-09": [tx("z", "2026-09-01", "ifood", 3000)] };
+    expect(repeatedMerchants(many, "2026-10").has("ifood")).toBe(false);
   });
 });
 
