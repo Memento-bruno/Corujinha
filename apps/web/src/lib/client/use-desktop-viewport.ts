@@ -15,6 +15,21 @@ export const DESKTOP_WIDTH = 920;
  * o menu fica parado. Computador (sem encolher) => 1.
  */
 export function useNavZoom(): number {
+  // 0,8: o menu fica um pouco menor que um menu comum de celular, para não tomar a tela.
+  return useShrinkZoom(0.8, 3);
+}
+
+/**
+ * Topo da tela (logo, Casal/Bruno/Patricia, formato dos valores e meses): no celular os botões
+ * ficavam com ~2 mm, pequenos demais para o dedo. Crescem um pouco, sem chegar ao tamanho do menu,
+ * para tudo continuar cabendo numa linha.
+ */
+export function useHeaderZoom(): number {
+  return useShrinkZoom(0.62, 1.5);
+}
+
+/** Quanto desfazer o encolhimento da tela no celular (`factor` da proporção real), até `max`. */
+function useShrinkZoom(factor: number, max: number): number {
   const [zoom, setZoom] = useState(1);
   useEffect(() => {
     const update = () => {
@@ -22,9 +37,8 @@ export function useNavZoom(): number {
       const landscape = window.matchMedia("(orientation: landscape)").matches;
       const { width, height } = window.screen;
       const physical = landscape ? Math.max(width, height) : Math.min(width, height);
-      // 0,8: o menu fica um pouco menor que um menu comum de celular, para não tomar a tela.
-      const z = physical > 0 && layout > physical ? (layout / physical) * 0.8 : 1;
-      setZoom(Math.min(3, Math.round(z * 100) / 100));
+      const z = physical > 0 && layout > physical ? Math.max(1, (layout / physical) * factor) : 1;
+      setZoom(Math.min(max, Math.round(z * 100) / 100));
     };
     update();
     window.addEventListener("orientationchange", update);
@@ -33,6 +47,6 @@ export function useNavZoom(): number {
       window.removeEventListener("orientationchange", update);
       window.removeEventListener("resize", update);
     };
-  }, []);
+  }, [factor, max]);
   return zoom;
 }

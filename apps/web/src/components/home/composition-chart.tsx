@@ -82,7 +82,14 @@ export function CompositionChart() {
                           className="tabular flex shrink-0 items-center justify-center overflow-hidden rounded-[5px] text-[9px] font-bold sm:text-[11px]"
                           style={{ height: Math.max(2, sh - 2), background: c.color, color: c.text }}
                         >
-                          {sh >= 22 ? <span className="hidden sm:inline">{fmt.num(v)}</span> : ""}
+                          {sh >= 22 ? (
+                            // Nos meses previstos as listras passam por cima: o número ganha um fundo escuro para dar para ler.
+                            <span className={m.forecast ? "relative z-10 hidden rounded-full bg-zinc-900/75 px-1.5 leading-[1.5] text-white sm:inline" : "hidden sm:inline"}>
+                              {fmt.num(v)}
+                            </span>
+                          ) : (
+                            ""
+                          )}
                         </span>
                       );
                     })}

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useDerived } from "@/lib/client/derived";
 import { useStore } from "@/lib/client/store";
 import { parseMoneyToCents } from "@/lib/domain/money";
-import type { Transaction } from "@/lib/domain/types";
+import { ownerSplit, type Transaction } from "@/lib/domain/types";
 import { SUBSCRIPTION_TAG } from "@/lib/engines/analytics";
 import { applyMerchantRule } from "@/lib/engines/merchants";
 import { guessCategory, merchantKeyOf } from "@/lib/importers/normalize";
@@ -40,7 +40,7 @@ export function ManualPurchaseSheet({ open, onClose }: { open: boolean; onClose:
       paidBy: card.owner,
       category,
       tags: d.config.subscriptionMerchants.includes(merchantKey) ? [SUBSCRIPTION_TAG] : [],
-      split: { type: "SHARED_DEFAULT" },
+      split: ownerSplit(card.owner),
       source: "manual",
     };
     const tx = applyMerchantRule(d.config.merchantRules, base);

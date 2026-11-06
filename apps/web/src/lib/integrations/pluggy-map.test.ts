@@ -50,7 +50,7 @@ describe("pluggy-map", () => {
       ["pluggy:d", 750],
       ["pluggy:e", -300],
     ]);
-    expect(list[0]).toMatchObject({ cardId: "card-1", paidBy: "USER_A", source: "pluggy", split: { type: "SHARED_DEFAULT" } });
+    expect(list[0]).toMatchObject({ cardId: "card-1", paidBy: "USER_A", source: "pluggy", split: { type: "INDIVIDUAL_A" } });
   });
 
   it("usa o mês de vencimento da fatura e as parcelas", () => {

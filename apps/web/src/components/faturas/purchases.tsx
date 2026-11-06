@@ -7,7 +7,7 @@ import { useStore } from "@/lib/client/store";
 import { CATEGORIES, CATEGORY_IDS } from "@/lib/domain/categories";
 import type { CategoryId, RecurringDebt, Split, Transaction } from "@/lib/domain/types";
 import { SUBSCRIPTION_TAG, isSubscription } from "@/lib/engines/analytics";
-import { learnMerchant, propagateToSameMerchant } from "@/lib/engines/merchants";
+import { alwaysSplitOf, learnMerchant, propagateToSameMerchant, setMerchantAlwaysSplit } from "@/lib/engines/merchants";
 import { isSamePurchase } from "@/lib/engines/installments";
 import { cardRecurringFor } from "@/lib/engines/recurring";
 import { cn } from "@/lib/utils";
@@ -128,11 +128,20 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
     });
   };
 
-  /** Muda setor/divisão: salva, lembra o fornecedor e passa para as outras compras dele no mês. */
+  /**
+   * Muda setor/divisão e salva. O setor é lembrado e passa para as outras compras da loja no mês.
+   * Quem paga vale só para esta compra (cada um paga a da própria fatura); para a loja ficar sempre
+   * dividida existe o botão "Sempre dividir".
+   */
   const change = (before: Transaction, after: Transaction) => {
-    const learned: { category?: CategoryId; split?: Split } = {};
+    const learned: { category?: CategoryId } = {};
     if (before.category !== after.category) learned.category = after.category;
-    if (JSON.stringify(before.split) !== JSON.stringify(after.split)) learned.split = after.split;
+    const splitChanged = JSON.stringify(before.split) !== JSON.stringify(after.split);
+    const always = alwaysSplitOf(d.config.merchantRules, after.merchantKey);
+    // Loja marcada "sempre dividir" e a divisão mudou para outra divisão: a loja passa a usar a nova.
+    if (splitChanged && always && isShared(after.split)) {
+      void updateConfig((c) => ({ ...c, merchantRules: setMerchantAlwaysSplit(c.merchantRules, after, after.split) }));
+    }
     const name = before.description;
     let others = 0;
     if (after.predictedFrom) {
@@ -145,7 +154,7 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
       });
       if (cardRecurringFor(debts, after)) syncRecurring(after, true);
       // Compra parcelada: a mudança vale para as parcelas dos outros meses ainda abertos.
-      if ((learned.category || learned.split) && after.installment && after.installment.total > 1) {
+      if ((learned.category || splitChanged) && after.installment && after.installment.total > 1) {
         for (const [m, f] of Object.entries(state!.statements)) {
           if (m === d.month || f.data.snapshot) continue;
           if (!f.data.transactions.some((t) => isSamePurchase(d.month, after, m, t))) continue;
@@ -153,21 +162,41 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
             ...s,
             transactions: s.transactions.map((t) =>
               isSamePurchase(d.month, after, m, t)
-                ? { ...t, ...(learned.category ? { category: after.category } : {}), ...(learned.split ? { split: after.split } : {}) }
+                ? { ...t, ...(learned.category ? { category: after.category } : {}), ...(splitChanged ? { split: after.split } : {}) }
                 : t,
             ),
           }));
         }
       }
     }
-    if (learned.category || learned.split) {
+    if (learned.category) {
       void updateConfig((c) => ({ ...c, merchantRules: learnMerchant(c.merchantRules, after, learned) }));
-      const what = [CATEGORIES[after.category].label, splitLabel(after.split, d.config)].join(" · ");
       setSaved({
         id: after.id,
-        text: `Salvo e lembrado: as próximas compras de ${name} já chegam como ${what}.${others ? ` Mudei também ${others} outra${others === 1 ? "" : "s"} compra${others === 1 ? "" : "s"} dele${others === 1 ? "" : "s"} deste mês.` : ""}`,
+        text: `Salvo e lembrado: as próximas compras de ${name} já chegam como ${CATEGORIES[after.category].label}.${others ? ` Mudei também ${others} outra${others === 1 ? "" : "s"} compra${others === 1 ? "" : "s"} dele${others === 1 ? "" : "s"} deste mês.` : ""}`,
       });
+    } else if (splitChanged) {
+      setSaved({ id: after.id, text: `Salvo só nesta compra: ${splitLabel(after.split, d.config)}.` });
     }
+  };
+
+  /** Botão "Sempre dividir": a loja passa a chegar dividida em todas as faturas, dos dois. */
+  const toggleAlwaysSplit = (t: Transaction, on: boolean) => {
+    const split: Split = on ? (isShared(t.split) ? t.split : { type: "SHARED_DEFAULT" }) : t.split;
+    void updateConfig((c) => ({ ...c, merchantRules: setMerchantAlwaysSplit(c.merchantRules, t, on ? split : null) }));
+    if (on) {
+      // As compras dessa loja que já estão neste mês também ficam divididas.
+      void updateStatement(d.month, (s) => ({
+        ...s,
+        transactions: s.transactions.map((x) => (x.merchantKey === t.merchantKey && x.amount > 0 && !isShared(x.split) ? { ...x, split } : x)),
+      }));
+    }
+    setSaved({
+      id: t.id,
+      text: on
+        ? `Salvo: ${t.description} vai chegar sempre dividida, nas duas faturas.`
+        : `Salvo: ${t.description} volta a ser de quem é o dono da fatura.`,
+    });
   };
 
   const toggleSub = (t: Transaction, on: boolean) => {
@@ -233,6 +262,8 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
         if (!v && t.predictedFrom) setOpen(null);
       }}
       onSub={(v) => toggleSub(t, v)}
+      alwaysSplit={Boolean(alwaysSplitOf(d.config.merchantRules, t.merchantKey))}
+      onAlwaysSplit={(v) => toggleAlwaysSplit(t, v)}
       onRemove={() => remove(t)}
       fmtMoney={fmt.money}
     />
@@ -299,8 +330,8 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
         </p>
       ) : (
         <p className="mt-3 rounded-2xl bg-zinc-50 px-3.5 py-2.5 text-sm text-zinc-600">
-          Toque numa compra para mudar <b>de quem é</b> e a <b>categoria</b>. O app lembra o fornecedor: a próxima compra do mesmo lugar já chega
-          certinha.
+          Toda compra entra como do <b>dono da fatura</b>. Toque numa compra para mudar <b>de quem é</b> (vale só para ela) e a <b>categoria</b>.
+          Loja que é sempre dos dois? Abra a compra e ligue <b>Sempre dividir</b>.
         </p>
       )}
 
@@ -356,6 +387,8 @@ function Row({
   onChange,
   onRepeat,
   onSub,
+  alwaysSplit,
+  onAlwaysSplit,
   onRemove,
   fmtMoney,
 }: {
@@ -369,6 +402,8 @@ function Row({
   onChange: (t: Transaction) => void;
   onRepeat: (v: boolean) => void;
   onSub: (v: boolean) => void;
+  alwaysSplit: boolean;
+  onAlwaysSplit: (v: boolean) => void;
   onRemove: () => void;
   fmtMoney: (c: number) => string;
 }) {
@@ -503,6 +538,17 @@ function Row({
                 <span className="block text-xs text-zinc-500">Aparece como prevista nas próximas faturas</span>
               </span>
               <Switch checked={repeats} onCheckedChange={onRepeat} />
+            </label>
+          )}
+          {!pred && tx.amount > 0 && tx.merchantKey && tx.merchantKey !== "desconhecido" && (
+            <label className="flex items-center justify-between gap-3">
+              <span>
+                <span className="block text-sm font-semibold">Sempre dividir esta loja</span>
+                <span className="block text-xs text-zinc-500">
+                  {alwaysSplit ? "As compras daqui chegam divididas, nas duas faturas" : "Sem isso, cada um paga o que comprou na própria fatura"}
+                </span>
+              </span>
+              <Switch checked={alwaysSplit} onCheckedChange={onAlwaysSplit} />
             </label>
           )}
           {!pred && (

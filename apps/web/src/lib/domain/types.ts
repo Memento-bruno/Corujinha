@@ -26,6 +26,15 @@ export interface Split {
   percentA?: number;
 }
 
+/** Compra 100% de quem é o dono da fatura. É assim que toda compra de cartão chega. */
+export function ownerSplit(owner: UserId): Split {
+  return { type: owner === "USER_A" ? "INDIVIDUAL_A" : "INDIVIDUAL_B" };
+}
+
+export function isSharedSplit(s: Split | undefined): boolean {
+  return s?.type === "SHARED_DEFAULT" || s?.type === "SHARED_CUSTOM";
+}
+
 export type CategoryId =
   | "mercado"
   | "restaurantes"
@@ -106,6 +115,11 @@ export interface HouseholdConfig {
   /** Conexões Open Finance (Meu Pluggy). O itemId sozinho não dá acesso a nada sem o client secret. */
   pluggyItems?: PluggyItemLink[];
   pluggyLastSyncAt?: string;
+  /**
+   * Quando as compras de cartão já salvas passaram a ser do dono da fatura (conversão feita uma vez só).
+   * Sem isso, o servidor converte os meses abertos na próxima abertura do app.
+   */
+  ownerPaysCardsAt?: string;
   updatedAt: string;
 }
 

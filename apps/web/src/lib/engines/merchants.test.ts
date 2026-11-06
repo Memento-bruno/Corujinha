@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Transaction } from "../domain/types";
-import { applyMerchantRule, learnMerchant, propagateToSameMerchant } from "./merchants";
+import { alwaysSplitOf, applyMerchantRule, learnMerchant, propagateToSameMerchant, setMerchantAlwaysSplit } from "./merchants";
 
 const tx = (o: Partial<Transaction> = {}): Transaction => ({
   id: "t1",
@@ -42,11 +42,30 @@ describe("memória de fornecedores", () => {
       tx({ id: "t3", split: { type: "INDIVIDUAL_A" } }),
       tx({ id: "t4", merchantKey: "ifood" }),
     ];
-    const r = propagateToSameMerchant(list, before, after);
+    const r = propagateToSameMerchant(list, before, after, { split: true });
     expect(r.changed).toBe(2);
     expect(r.transactions[1]).toMatchObject({ category: "farmacia", split: { type: "INDIVIDUAL_B" } });
     // t3 tinha divisão própria: só o setor muda
     expect(r.transactions[2]).toMatchObject({ category: "farmacia", split: { type: "INDIVIDUAL_A" } });
     expect(r.transactions[3].category).toBe("outros");
+  });
+
+  it("por padrão, quem paga não passa para as outras compras da loja (cada um paga a sua)", () => {
+    const before = tx({ split: { type: "INDIVIDUAL_A" } });
+    const after = { ...before, split: { type: "SHARED_DEFAULT" as const } };
+    const r = propagateToSameMerchant([before, tx({ id: "t2", split: { type: "INDIVIDUAL_A" } })], before, after);
+    expect(r.changed).toBe(0);
+    expect(r.transactions[1].split.type).toBe("INDIVIDUAL_A");
+  });
+
+  it("regra 'só fulano' não tira a compra do dono da fatura; só 'sempre dividir' vale", () => {
+    const owner = tx({ paidBy: "USER_B", split: { type: "INDIVIDUAL_B" } });
+    const onlyA = { cea: { name: "CEA", split: { type: "INDIVIDUAL_A" as const }, updatedAt: "x" } };
+    expect(applyMerchantRule(onlyA, { ...owner, merchantKey: "cea" }).split.type).toBe("INDIVIDUAL_B");
+    const rules = setMerchantAlwaysSplit(undefined, { merchantKey: "cea", description: "C&A" }, { type: "SHARED_DEFAULT" });
+    expect(alwaysSplitOf(rules, "cea")).toEqual({ type: "SHARED_DEFAULT" });
+    expect(applyMerchantRule(rules, { ...owner, merchantKey: "cea" }).split.type).toBe("SHARED_DEFAULT");
+    // Desligar o botão apaga a lembrança (sem setor guardado, a loja some da lista)
+    expect(setMerchantAlwaysSplit(rules, { merchantKey: "cea", description: "C&A" }, null)).toEqual({});
   });
 });

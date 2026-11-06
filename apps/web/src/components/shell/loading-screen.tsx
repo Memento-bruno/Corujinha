@@ -130,7 +130,7 @@ export function LoadingScreen({
   const nextId = useRef(1);
   const [, setFrame] = useState(0);
   const [saved, setSaved] = useState(0);
-  const [leaving, setLeaving] = useState(false);
+  const [leaving, setLeaving] = useState<0 | 1 | 2>(0);
   const now = useRef(0);
 
   const spawn = useCallback((x: number, y: number, vx: number, vy: number) => {
@@ -166,8 +166,11 @@ export function LoadingScreen({
       if (readyRef.current && p >= 1 && t - startedAt >= MIN_SHOW_MS && !doneAt) doneAt = t;
       if (doneAt && !finished && t - doneAt > 450) {
         finished = true;
-        setLeaving(true);
-        window.setTimeout(() => doneRef.current(), 420);
+        // Saída em 2 passos: o fundo (preto no tema escuro) vira o cinza claro do app enquanto o
+        // desenho some; só depois a tela inteira desaparece. Assim não dá clarão ao abrir o app.
+        setLeaving(1);
+        window.setTimeout(() => setLeaving(2), 450);
+        window.setTimeout(() => doneRef.current(), 750);
       }
 
       // --- chuva de moedas ---
@@ -317,8 +320,9 @@ export function LoadingScreen({
   return (
     <div
       className={
-        "fixed inset-0 z-[100] flex items-center justify-center bg-white text-zinc-900 transition-opacity duration-500 select-none dark:bg-black dark:text-zinc-100 " +
-        (leaving ? "pointer-events-none opacity-0" : "opacity-100")
+        "fixed inset-0 z-[100] flex items-center justify-center text-zinc-900 transition-[background-color,opacity] ease-out select-none dark:text-zinc-100 " +
+        (leaving ? "pointer-events-none bg-app dark:bg-app " : "bg-white dark:bg-black ") +
+        (leaving === 2 ? "opacity-0 duration-300" : "opacity-100 duration-[450ms]")
       }
       style={{ touchAction: "none" }}
       role="progressbar"
@@ -327,7 +331,10 @@ export function LoadingScreen({
       aria-valuemax={100}
       aria-valuenow={pct}
     >
-      <div className="flex flex-col items-center gap-5 px-4" style={zoom !== 1 ? { zoom } : undefined}>
+      <div
+        className={"flex flex-col items-center gap-5 px-4 transition-opacity duration-300 " + (leaving ? "opacity-0" : "opacity-100")}
+        style={zoom !== 1 ? { zoom } : undefined}
+      >
       <div className="flex flex-col items-center text-center">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-sol.svg" alt="Corujinha" width={88} height={88} className="mb-1 size-[88px] animate-[ls-bob_2.4s_ease-in-out_infinite] motion-reduce:animate-none" />
