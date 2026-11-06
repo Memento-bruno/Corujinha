@@ -3,17 +3,47 @@ import path from "node:path";
 import { isMonthKey, monthOf, addMonths } from "../domain/months";
 import type { HouseholdConfig, MonthKey, RecurringDebtsFile, StatementFile } from "../domain/types";
 import { defaultConfig, demoConfig, demoRecurring, demoStatements } from "../demo/seed";
-import type { BlobStore } from "./blob-store";
+import { ConflictError, StorageUnavailableError, type BlobStore } from "./blob-store";
 import { decryptJson, encryptJson } from "./crypto";
 import { DriveBlobStore } from "./drive-store";
-import { env, isDemoMode, storageMode } from "./env";
+import { driveMissingVars, env, isDemoMode, isStorageBlocked, storageMode } from "./env";
+import { BadRequestError } from "./errors";
 import { LocalBlobStore } from "./local-store";
 
 export const FILES = {
   config: "household-config.json",
   recurring: "recurring-debts.json",
   statement: (month: MonthKey) => `statements-${month}.json`,
+  backupPrefix: "backup-",
 };
+
+/** Quantas cópias de segurança guardar (as mais antigas vão para a lixeira do Drive). */
+const KEEP_BACKUPS = 15;
+const BACKUP_NAME = /^backup-(\d{8})-(\d{6})-([a-z0-9-]{1,40})\.json$/;
+
+export interface BackupFile {
+  schemaVersion: 1;
+  kind: "backup";
+  createdAt: string;
+  reason: string;
+  config: HouseholdConfig | null;
+  recurring: RecurringDebtsFile | null;
+  statements: StatementFile[];
+}
+
+export interface BackupInfo {
+  name: string;
+  createdAt: string;
+  reason: string;
+}
+
+function backupInfo(name: string): BackupInfo | null {
+  const m = BACKUP_NAME.exec(name);
+  if (!m) return null;
+  const [, d, t, reason] = m;
+  const createdAt = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}Z`;
+  return { name, createdAt, reason };
+}
 
 export interface Versioned<T> {
   data: T;
@@ -49,7 +79,7 @@ export class DriveDatabaseService {
   private async readJson<T>(name: string): Promise<Versioned<T> | null> {
     const blob = await this.store.read(name);
     if (!blob) return null;
-    return { data: decryptJson<T>(blob.content, this.secret, name), etag: blob.etag };
+    return { data: decryptJson<T>(blob.content, this.secret, name, this.store.kind === "drive"), etag: blob.etag };
   }
 
   private async writeJson<T>(name: string, data: T, etag: string | null): Promise<Versioned<T>> {
@@ -99,12 +129,92 @@ export class DriveDatabaseService {
     return this.store.versions();
   }
 
+  /**
+   * Lista a pasta do Drive numa consulta só. Nos segundos seguintes, ler um arquivo custa uma
+   * chamada ao Drive em vez de duas, e meses que não existem nem são consultados.
+   */
+  async prime(): Promise<void> {
+    if (this.store.kind === "drive") await this.store.versions();
+  }
+
   async listStatementMonths(): Promise<MonthKey[]> {
     const names = await this.store.list("statements-");
     return names
       .map((n) => n.replace(/^statements-/, "").replace(/\.json$/, ""))
       .filter(isMonthKey)
       .sort();
+  }
+
+  /**
+   * Cópia de segurança de tudo (cadastro, contas fixas e todas as faturas) num arquivo só,
+   * criptografado como os outros. Feita antes de ações que apagam compras em massa.
+   */
+  async backup(reason: string): Promise<BackupInfo> {
+    const slug = reason.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "manual";
+    const months = await this.listStatementMonths();
+    const [config, recurring, ...statements] = await Promise.all([
+      this.readJson<HouseholdConfig>(FILES.config),
+      this.readJson<RecurringDebtsFile>(FILES.recurring),
+      ...months.map((m) => this.readJson<StatementFile>(FILES.statement(m))),
+    ]);
+    const now = new Date();
+    const stamp = now.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+    const name = `${FILES.backupPrefix}${stamp}-${slug}.json`;
+    const file: BackupFile = {
+      schemaVersion: 1,
+      kind: "backup",
+      createdAt: now.toISOString(),
+      reason: slug,
+      config: config?.data ?? null,
+      recurring: recurring?.data ?? null,
+      statements: statements.flatMap((s) => (s ? [s.data] : [])),
+    };
+    try {
+      await this.writeJson(name, file, null);
+    } catch (e) {
+      // Duas cópias no mesmo segundo: a outra já serve.
+      if (!(e instanceof ConflictError)) throw e;
+    }
+    const all = (await this.store.list(FILES.backupPrefix)).filter((n) => BACKUP_NAME.test(n)).sort();
+    for (const old of all.slice(0, Math.max(0, all.length - KEEP_BACKUPS))) await this.store.remove(old);
+    return backupInfo(name)!;
+  }
+
+  async listBackups(): Promise<BackupInfo[]> {
+    const names = await this.store.list(FILES.backupPrefix);
+    return names
+      .map(backupInfo)
+      .filter((b): b is BackupInfo => b !== null)
+      .sort((a, b) => b.name.localeCompare(a.name));
+  }
+
+  /**
+   * Volta tudo para como estava na cópia. Antes, faz uma cópia do estado atual (dá para desfazer).
+   * Meses que não existiam na cópia ficam como estão.
+   */
+  async restoreBackup(name: string): Promise<{ files: number; safety: BackupInfo }> {
+    if (!backupInfo(name)) throw new BadRequestError("Cópia de segurança inválida.");
+    const saved = await this.readJson<BackupFile>(name);
+    if (!saved || saved.data.kind !== "backup") throw new BadRequestError("Cópia de segurança não encontrada.");
+    const safety = await this.backup("antes-de-restaurar");
+    const b = saved.data;
+    const targets: [string, unknown][] = [
+      ...(b.config ? [[FILES.config, b.config] as [string, unknown]] : []),
+      ...(b.recurring ? [[FILES.recurring, b.recurring] as [string, unknown]] : []),
+      ...b.statements.filter((s) => isMonthKey(s.month)).map((s) => [FILES.statement(s.month), s] as [string, unknown]),
+    ];
+    for (const [file, data] of targets) {
+      for (let attempt = 0; ; attempt++) {
+        const current = await this.store.read(file);
+        try {
+          await this.writeJson(file, data, current?.etag ?? null);
+          break;
+        } catch (e) {
+          if (!(e instanceof ConflictError) || attempt >= 2) throw e;
+        }
+      }
+    }
+    return { files: targets.length, safety };
   }
 
   /** Apaga tudo e recria os dados de demonstração (somente no modo local). */
@@ -134,6 +244,14 @@ let instance: Promise<DriveDatabaseService> | null = null;
 export function getDatabase(): Promise<DriveDatabaseService> {
   if (!instance) {
     instance = (async () => {
+      if (isStorageBlocked()) {
+        throw new StorageUnavailableError(
+          `O Google Drive não está configurado na Vercel (falta: ${driveMissingVars().join(", ")}). ` +
+            "Para não gravar num lugar temporário e perder o que vocês editarem, o app não abriu os dados. " +
+            "Coloque a variável de volta na Vercel e faça Redeploy.",
+          "DRIVE_MISSING",
+        );
+      }
       if (storageMode() === "drive") {
         return new DriveDatabaseService(new DriveBlobStore(env.driveFolderId!), env.encryptionSecret);
       }
