@@ -44,6 +44,7 @@ export type CategoryId =
   | "combustivel"
   | "carro"
   | "estacionamento"
+  | "seguros"
   | "moradia"
   | "saude"
   | "farmacia"

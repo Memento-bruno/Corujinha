@@ -9,6 +9,7 @@ export const CATEGORIES: Record<CategoryId, CategoryMeta> = {
   combustivel: { id: "combustivel", label: "Combustível", essential: true, highFrequency: false, color: "#0ea5e9" },
   carro: { id: "carro", label: "Carro", essential: true, highFrequency: false, color: "#b45309" },
   estacionamento: { id: "estacionamento", label: "Estacionamento", essential: false, highFrequency: true, color: "#1e40af" },
+  seguros: { id: "seguros", label: "Seguros", essential: true, highFrequency: false, color: "#0f766e" },
   moradia: { id: "moradia", label: "Moradia", essential: true, highFrequency: false, color: "#6366f1" },
   saude: { id: "saude", label: "Saúde", essential: true, highFrequency: false, color: "#14b8a6" },
   farmacia: { id: "farmacia", label: "Farmácia", essential: true, highFrequency: false, color: "#22c55e" },
