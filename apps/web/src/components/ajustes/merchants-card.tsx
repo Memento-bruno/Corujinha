@@ -38,7 +38,8 @@ export function MerchantsCard({ cfg, set }: { cfg: HouseholdConfig; set: (fn: (c
       return { ...c, merchantRules: r };
     });
 
-  const splitValue = (s?: Split) => (!s ? "" : s.type === "SHARED_CUSTOM" ? `C${s.percentA}` : s.type);
+  // "Só fulano" não vale mais na loja (cada um paga a sua fatura): aparece como "dono da fatura".
+  const splitValue = (s?: Split) => (!s || s.type === "INDIVIDUAL_A" || s.type === "INDIVIDUAL_B" ? "" : s.type === "SHARED_CUSTOM" ? `C${s.percentA}` : s.type);
   const parseSplit = (v: string): Split | null =>
     !v ? null : v.startsWith("C") ? { type: "SHARED_CUSTOM", percentA: Number(v.slice(1)) } : { type: v as SplitType };
   const customs = [...new Set([60, 70, 80, ...all.map(({ rule }) => (rule.split?.type === "SHARED_CUSTOM" ? rule.split.percentA ?? 50 : 0)).filter(Boolean)])].sort();
@@ -52,7 +53,7 @@ export function MerchantsCard({ cfg, set }: { cfg: HouseholdConfig; set: (fn: (c
       />
       {all.length === 0 ? (
         <p className="rounded-2xl bg-zinc-50 p-3 text-sm text-zinc-500">
-          Ainda nenhum. Em Faturas, toque numa compra e mude a categoria ou de quem é: o app guarda aqui e usa nas próximas.
+          Ainda nenhum. Em Faturas, toque numa compra e mude a categoria ou ligue "Sempre dividir esta loja": o app guarda aqui e usa nas próximas.
         </p>
       ) : (
         <>
@@ -90,13 +91,11 @@ export function MerchantsCard({ cfg, set }: { cfg: HouseholdConfig; set: (fn: (c
                   ))}
                 </Select>
                 <Select aria-label="Divisão" className="h-10 text-[13px]" value={splitValue(rule.split)} onChange={(e) => patch(key, { split: parseSplit(e.target.value) })}>
-                  <option value="">Divisão: padrão</option>
-                  <option value="SHARED_DEFAULT">{cfg.defaultSplitPercentA === 50 ? "Meio a meio" : `Divisão padrão ${cfg.defaultSplitPercentA}/${100 - cfg.defaultSplitPercentA}`}</option>
-                  <option value="INDIVIDUAL_A">Só {a}</option>
-                  <option value="INDIVIDUAL_B">Só {b}</option>
+                  <option value="">Quem paga: dono da fatura</option>
+                  <option value="SHARED_DEFAULT">Sempre dividir: {cfg.defaultSplitPercentA === 50 ? "meio a meio" : `${cfg.defaultSplitPercentA}/${100 - cfg.defaultSplitPercentA}`}</option>
                   {customs.map((p) => (
                     <option key={p} value={`C${p}`}>
-                      {a} {p}% · {b} {100 - p}%
+                      Sempre dividir: {a} {p}% · {b} {100 - p}%
                     </option>
                   ))}
                 </Select>

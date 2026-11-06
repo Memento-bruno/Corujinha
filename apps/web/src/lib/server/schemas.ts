@@ -110,6 +110,7 @@ export const configSchema = z.object({
     .max(10)
     .optional(),
   pluggyLastSyncAt: z.string().optional(),
+  ownerPaysCardsAt: z.string().max(40).optional(),
   updatedAt: z.string(),
 });
 
