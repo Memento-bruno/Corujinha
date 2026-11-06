@@ -7,7 +7,7 @@ import { api, useStore } from "@/lib/client/store";
 import { CATEGORIES } from "@/lib/domain/categories";
 import { formatBRL, parseMoneyToCents } from "@/lib/domain/money";
 import { cardGroups } from "@/lib/domain/card-groups";
-import type { CardBrand, CategoryId, CreditCard, HouseholdConfig, Split, UserId } from "@/lib/domain/types";
+import { ownerSplit, type CardBrand, type CategoryId, type CreditCard, type HouseholdConfig, type Split, type Transaction, type UserId } from "@/lib/domain/types";
 import { CreditCardVisual } from "../home/credit-card";
 import { Button } from "../ui/button";
 import { Card, CardHeader } from "../ui/card";
@@ -188,47 +188,61 @@ function MoneyField({ value, onCommit, disabled }: { value: number; onCommit: (c
   );
 }
 
-/** De quem são as compras de um cartão (ex.: adicional que só um dos dois usa). */
+/**
+ * De quem são as compras de um cartão. Sem escolha salva, valem do dono do cartão (regra do casal);
+ * "Dividir" faz toda compra nova do cartão chegar dividida (ex.: cartão usado para as contas da casa).
+ */
 function CardSplitSelect({ card, label }: { card: CreditCard; label: string }) {
   const { state, updateConfig, updateStatement, toast } = useStore();
   const cfg = state!.config.data;
   const first = (u: UserId) => cfg.users[u].name.split(" ")[0];
-  const value = card.defaultSplit?.type === "INDIVIDUAL_A" ? "A" : card.defaultSplit?.type === "INDIVIDUAL_B" ? "B" : "";
+  const owner = ownerSplit(card.owner);
+  const current = card.defaultSplit ?? owner;
+  const value = current.type === "INDIVIDUAL_A" ? "A" : current.type === "INDIVIDUAL_B" ? "B" : "S";
+  const [busy, setBusy] = useState(false);
   const change = async (v: string) => {
-    const split: Split | undefined = v === "A" ? { type: "INDIVIDUAL_A" } : v === "B" ? { type: "INDIVIDUAL_B" } : undefined;
-    const before = card.defaultSplit ?? { type: "SHARED_DEFAULT" };
-    const ok = await updateConfig((c) => ({
-      ...c,
-      cards: c.cards.map((x) => {
-        if (x.id !== card.id) return x;
-        const { defaultSplit: _old, ...rest } = x;
-        void _old;
-        return split ? { ...rest, defaultSplit: split } : rest;
-      }),
-    }));
-    if (!ok) return;
-    // Compras deste cartão nos meses ainda abertos que estavam com a divisão antiga do cartão passam para a nova.
-    const after = split ?? { type: "SHARED_DEFAULT" as const };
-    let changed = 0;
-    for (const [m, f] of Object.entries(state!.statements)) {
-      if (f.data.snapshot) continue;
-      const hits = f.data.transactions.filter((t) => t.cardId === card.id && t.split.type === before.type).length;
-      if (!hits) continue;
-      changed += hits;
-      await updateStatement(m, (s) => ({
-        ...s,
-        transactions: s.transactions.map((t) => (t.cardId === card.id && t.split.type === before.type ? { ...t, split: after } : t)),
+    const after: Split = v === "A" ? { type: "INDIVIDUAL_A" } : v === "B" ? { type: "INDIVIDUAL_B" } : { type: "SHARED_DEFAULT" };
+    if (after.type === current.type) return;
+    const before = current;
+    // Igual ao dono do cartão: não precisa guardar nada (é o padrão).
+    const keep = after.type === owner.type ? undefined : after;
+    setBusy(true);
+    try {
+      const ok = await updateConfig((c) => ({
+        ...c,
+        cards: c.cards.map((x) => {
+          if (x.id !== card.id) return x;
+          const { defaultSplit: _old, ...rest } = x;
+          void _old;
+          return keep ? { ...rest, defaultSplit: keep } : rest;
+        }),
       }));
+      if (!ok) return;
+      // Compras deste cartão nos meses ainda abertos que estavam com a divisão antiga do cartão passam para a nova.
+      const hit = (t: Transaction) => t.cardId === card.id && t.split.type === before.type;
+      let changed = 0;
+      const saves: Promise<void>[] = [];
+      for (const [m, f] of Object.entries(state!.statements)) {
+        if (f.data.snapshot) continue;
+        const hits = f.data.transactions.filter(hit).length;
+        if (!hits) continue;
+        changed += hits;
+        saves.push(updateStatement(m, (s) => ({ ...s, transactions: s.transactions.map((t) => (hit(t) ? { ...t, split: after } : t)) })));
+      }
+      await Promise.all(saves);
+      toast(changed ? `Salvo. Mudei ${changed} compra${changed === 1 ? "" : "s"} deste cartão nos meses abertos.` : "Salvo.", "success");
+    } finally {
+      setBusy(false);
     }
-    toast(changed ? `Salvo. Mudei ${changed} compra${changed === 1 ? "" : "s"} deste cartão nos meses abertos.` : "Salvo.", "success");
   };
+  const shared = cfg.defaultSplitPercentA === 50 ? "meio a meio" : `${cfg.defaultSplitPercentA}/${100 - cfg.defaultSplitPercentA}`;
   return (
     <label className="mt-1.5 block px-1">
       <span className="text-[11px] font-semibold text-zinc-500">{label}</span>
-      <Select className="h-9 text-xs" value={value} onChange={(e) => void change(e.target.value)}>
-        <option value="">Divisão padrão do casal</option>
-        <option value="A">Só de {first("USER_A")}</option>
-        <option value="B">Só de {first("USER_B")}</option>
+      <Select className="h-9 text-xs" value={value} disabled={busy} onChange={(e) => void change(e.target.value)}>
+        <option value="A">Só de {first("USER_A")}{card.owner === "USER_A" ? " (dono)" : ""}</option>
+        <option value="B">Só de {first("USER_B")}{card.owner === "USER_B" ? " (dono)" : ""}</option>
+        <option value="S">Dividir: {shared}</option>
       </Select>
     </label>
   );
