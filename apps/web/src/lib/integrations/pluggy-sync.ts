@@ -1,5 +1,6 @@
 import "server-only";
 import { addMonths, monthOf } from "../domain/months";
+import { cutoffMonth, isLockedTx } from "../domain/closing";
 import type { BankBill, HouseholdConfig, MonthKey, Transaction } from "../domain/types";
 import { applyMerchantRule, flagForReview } from "../engines/merchants";
 import { applyCardRecurring, cardRecurringFor } from "../engines/recurring";
@@ -131,6 +132,9 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   const firstRead = new Map(await Promise.all(sortedMonths.map(async (m) => [m, await db.getStatement(m)] as const)));
   // Os meses vão do mais antigo para o mais novo: o estorno encontra a compra original nos meses anteriores.
   const refunds = refundSplitIndex();
+  // Modo fechamento: o que vai até a data já foi acertado e o banco não mexe mais.
+  const closing = cfgV.data.closing;
+  const locked = (t: Transaction, m: MonthKey) => isLockedTx(t, m, closing);
   for (const month of sortedMonths) {
     const mapped = (byMonth.get(month) ?? []).map((t) => {
       const tx = applyCardRecurring(debts, withCardSplit(applyMerchantRule(cfg.merchantRules, t)));
@@ -141,16 +145,23 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
       const cur = attempt === 0 ? firstRead.get(month)! : await db.getStatement(month);
       if (attempt === 0) refunds.add([...cur.data.transactions, ...mapped.filter((t) => !cur.data.transactions.some((x) => x.externalId === t.externalId))]);
       incoming = mapped.map((t) => refunds.apply(t));
+      // Mês inteiro antes do fechamento: só serve para os estornos acharem a compra original.
+      if (closing && month < cutoffMonth(closing)) break;
       if (cur.data.snapshot) {
         if (incoming.length) summary.skippedClosedMonths.push(month);
         break;
       }
+      const frozen = cur.data.transactions.filter((t) => locked(t, month));
+      const frozenExt = new Set(frozen.map((t) => t.externalId).filter(Boolean));
+      const existing = frozen.length ? cur.data.transactions.filter((t) => !locked(t, month)) : cur.data.transactions;
+      const fresh = incoming.filter((t) => !locked(t, month) && !frozenExt.has(t.externalId));
       const base =
         month < firstMonth
-          ? { merged: cur.data.transactions, added: 0, updated: 0, removed: 0 }
-          : reconcile(cur.data.transactions, incoming, syncedCardIds);
-      const merged = base.merged.filter((t) => !isOrphan(t));
-      const r = { ...base, merged, removed: base.removed + (base.merged.length - merged.length) };
+          ? { merged: existing, added: 0, updated: 0, removed: 0 }
+          : reconcile(existing, fresh, syncedCardIds);
+      const open = base.merged.filter((t) => !isOrphan(t));
+      const merged = frozen.length ? [...frozen, ...open].sort((a, b) => a.date.localeCompare(b.date)) : open;
+      const r = { ...base, merged, removed: base.removed + (base.merged.length - open.length) };
       const bankBills = billsByMonth.has(month) ? { ...cur.data.bankBills, ...billsByMonth.get(month) } : cur.data.bankBills;
       const billsChanged = JSON.stringify(bankBills ?? null) !== JSON.stringify(cur.data.bankBills ?? null);
       if (r.added === 0 && r.updated === 0 && r.removed === 0 && !billsChanged) break;
@@ -193,10 +204,12 @@ export async function clearPluggyTransactions(
 ): Promise<{ removed: number; skippedClosedMonths: MonthKey[] }> {
   let removed = 0;
   const skippedClosedMonths: MonthKey[] = [];
+  // Compras até a data do fechamento ficam (já foram acertadas).
+  const closing = (await db.getConfig()).data.closing;
   for (const month of await db.listStatementMonths()) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const cur = await db.getStatement(month);
-      const keep = cur.data.transactions.filter((t) => t.source !== "pluggy" || !match(t));
+      const keep = cur.data.transactions.filter((t) => t.source !== "pluggy" || !match(t) || isLockedTx(t, month, closing));
       const gone = cur.data.transactions.length - keep.length;
       if (gone === 0 && !cur.data.bankBills) break;
       if (cur.data.snapshot) {

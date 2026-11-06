@@ -15,6 +15,7 @@ import { Input, Label, Select } from "../ui/field";
 import { IconBox } from "../ui/icon-box";
 import { Sheet } from "../ui/sheet";
 import { BackupsCard } from "./backups-card";
+import { ClosingCard } from "./closing-card";
 import { Switch } from "../ui/switch";
 import { MerchantsCard } from "./merchants-card";
 import { OpenFinanceCard } from "./open-finance-card";
@@ -384,6 +385,8 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
         <ReminderToggle cfg={cfg} me={state!.viewer.userId} on={Boolean(mode.remindersConfigured)} set={set} />
         <RecurringTab />
       </Card>
+
+      <ClosingCard cfg={cfg} />
 
       <MerchantsCard cfg={cfg} set={set} />
 

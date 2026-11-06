@@ -26,6 +26,7 @@ import {
   monthSpend,
 } from "../engines/overview";
 import { useStore } from "./store";
+import { debtsAfterClosing, isLockedTx } from "../domain/closing";
 
 /**
  * Formatador único de valores. No Modo Privacidade NENHUM valor em R$ é exibido:
@@ -83,13 +84,18 @@ function useDerivedOptional() {
     if (!state) return null;
     const { month, config, recurring, statements } = state;
     const cfg = config.data;
-    const debts = recurring.data.debts;
+    // Modo fechamento: o que vai até a data já foi acertado e fica fora de todas as contas.
+    const closing = cfg.closing;
+    const debts = debtsAfterClosing(recurring.data.debts, closing);
+    const openOf = (m: MonthKey, list: Transaction[]) => (closing ? list.filter((t) => !isLockedTx(t, m, closing)) : list);
     // Cada fatura já com as compras recorrentes de cartão previstas (as que o banco ainda não trouxe).
     // Mês fechado fica exatamente como foi fechado.
     const byMonth: Record<MonthKey, Transaction[]> = Object.fromEntries(
-      Object.entries(statements).map(([m, s]) => [m, s.data.snapshot ? s.data.transactions : withPredicted(debts, m, s.data.transactions)]),
+      Object.entries(statements).map(([m, s]) => [m, openOf(m, s.data.snapshot ? s.data.transactions : withPredicted(debts, m, s.data.transactions))]),
     );
-    const allTxs = byMonth[month] ?? withPredicted(debts, month, []);
+    const allTxs = byMonth[month] ?? openOf(month, withPredicted(debts, month, []));
+    /** Compras deste mês que ficaram no fechamento por data (não aparecem nem contam). */
+    const lockedCount = closing ? (statements[month]?.data.transactions ?? []).filter((t) => isLockedTx(t, month, closing)).length : 0;
     const txs = filterByView(allTxs, view);
     const prevMonth = addMonths(month, -1);
     const prevTxs = filterByView(byMonth[prevMonth] ?? [], view);
@@ -198,6 +204,10 @@ function useDerivedOptional() {
       suggestedSubscriptions,
       subscriptions,
       snapshot: statements[month]?.data.snapshot,
+      closing,
+      lockedCount,
+      /** Recorrentes já ajustadas ao fechamento por data (só para cálculo). */
+      debts,
       openMonth,
       view,
       viewDebts,

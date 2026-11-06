@@ -33,6 +33,9 @@ export async function PUT(req: Request) {
     data.incomes = incomes;
     // A conversão "compra é do dono da fatura" só roda uma vez: quem marca isso é o servidor.
     if (current.ownerPaysCardsAt) data.ownerPaysCardsAt = current.ownerPaysCardsAt;
+    // O fechamento por data só muda pela rota própria (/api/fechamento).
+    if (current.closing) data.closing = current.closing;
+    else delete data.closing;
     return db.saveConfig(data, body.etag);
   });
 }

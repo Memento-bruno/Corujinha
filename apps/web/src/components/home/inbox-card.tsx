@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { useStore } from "@/lib/client/store";
 import { monthName } from "@/lib/domain/months";
+import { openTxs } from "@/lib/domain/closing";
 import type { MonthKey, Transaction } from "@/lib/domain/types";
 
 interface Line {
@@ -28,7 +29,7 @@ export function InboxCard() {
     for (const m of months) {
       const file = state!.statements[m].data;
       if (file.snapshot) continue;
-      const txs: Transaction[] = file.transactions;
+      const txs: Transaction[] = openTxs(file.transactions, m, state!.config.data.closing);
       const review = txs.filter((t) => t.toReview).length;
       if (review > 0)
         out.push({

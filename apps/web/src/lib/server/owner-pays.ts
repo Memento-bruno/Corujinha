@@ -1,6 +1,7 @@
 import "server-only";
 import { ownerSplit, type HouseholdConfig, type MerchantRule, type Transaction } from "../domain/types";
 import { cardRecurringFor } from "../engines/recurring";
+import { keepLockedTxs } from "../domain/closing";
 import { ConflictError } from "./blob-store";
 import type { DriveDatabaseService } from "./database";
 
@@ -63,7 +64,9 @@ export async function ensureOwnerPaysCards(db: DriveDatabaseService): Promise<vo
       const r = convertMonthToOwnerPays(cur.data.transactions, first.data, debts);
       if (r.changed === 0) break;
       try {
-        await db.saveStatement({ ...cur.data, transactions: r.transactions }, cur.etag);
+        // Compras até a data do fechamento ficam como estão.
+        const transactions = keepLockedTxs(cur.data.transactions, r.transactions, month, first.data.closing);
+        await db.saveStatement({ ...cur.data, transactions }, cur.etag);
         break;
       } catch (e) {
         if (!(e instanceof ConflictError) || attempt === 2) throw e;

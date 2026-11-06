@@ -67,7 +67,7 @@ export function AcertoView() {
                 variant="outline"
                 size={d.snapshot ? "sm" : "lg"}
                 onClick={() => {
-                  const debts = state!.recurring.data.debts.filter((x) => x.kind !== "CARTAO" && isDebtActiveIn(x, d.month));
+                  const debts = d.debts.filter((x) => x.kind !== "CARTAO" && isDebtActiveIn(x, d.month));
                   downloadText(`corujinha-${d.month}.csv`, monthCsv(d.month, d.allTxs, debts, d.config));
                 }}
               >

@@ -132,6 +132,7 @@ export const configSchema = z.object({
   paidCardBills: z.array(z.string().max(100)).max(1000).optional(),
   reminderEmails: z.partialRecord(userId, z.boolean()).optional(),
   ownerPaysCardsAt: z.string().max(40).optional(),
+  closing: z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), closedAt: z.string().max(40), closedBy: userId }).optional(),
   updatedAt: z.string(),
 });
 

@@ -5,6 +5,7 @@ import { BadRequestError, handle } from "@/lib/server/http";
 import { importCommitSchema } from "@/lib/server/schemas";
 import { requireViewer } from "@/lib/server/session";
 import { guessCategory, merchantKeyOf } from "@/lib/importers/normalize";
+import { isLockedTx } from "@/lib/domain/closing";
 import { isSharedSplit, ownerSplit, type Transaction } from "@/lib/domain/types";
 
 /**
@@ -26,7 +27,13 @@ export async function POST(req: Request) {
       if (current.data.snapshot) throw new BadRequestError("Este mês já foi fechado.");
       const seen = new Set(current.data.transactions.map((t) => `${t.date}|${t.description}|${t.amount}|${t.cardId}`));
       const added: Transaction[] = [];
+      let locked = 0;
       for (const row of body.rows) {
+        // Compra até a data do fechamento: já foi acertada, não grava.
+        if (isLockedTx(row, body.month, config.closing)) {
+          locked++;
+          continue;
+        }
         const key = `${row.date}|${row.description}|${row.amount}|${card.id}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -58,7 +65,7 @@ export async function POST(req: Request) {
           },
           current.etag,
         );
-        return { added: added.length, duplicates: body.rows.length - added.length };
+        return { added: added.length, duplicates: body.rows.length - added.length - locked, locked };
       } catch (e) {
         if (!(e instanceof ConflictError) || attempt === 2) throw e;
       }

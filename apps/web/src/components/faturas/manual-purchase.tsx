@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { closingLabel } from "@/lib/domain/closing";
 import { useDerived } from "@/lib/client/derived";
 import { useStore } from "@/lib/client/store";
 import { parseMoneyToCents } from "@/lib/domain/money";
@@ -26,6 +27,10 @@ export function ManualPurchaseSheet({ open, onClose }: { open: boolean; onClose:
     const card = d.config.cards.find((c) => c.id === cardId);
     if (!desc.trim() || !amount || !card) {
       toast("Preencha o nome, o valor e o cartão.", "error");
+      return;
+    }
+    if (d.closing && date <= d.closing.date) {
+      toast(`Até ${closingLabel(d.closing)} está tudo fechado. Escolha uma data depois disso.`, "error");
       return;
     }
     const merchantKey = merchantKeyOf(desc);
@@ -65,7 +70,7 @@ export function ManualPurchaseSheet({ open, onClose }: { open: boolean; onClose:
           </label>
           <label className="block">
             <Label>Data</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Input type="date" value={date} min={d.closing ? nextDay(d.closing.date) : undefined} onChange={(e) => setDate(e.target.value)} />
           </label>
         </div>
         <label className="block">
@@ -84,4 +89,10 @@ export function ManualPurchaseSheet({ open, onClose }: { open: boolean; onClose:
       </div>
     </Sheet>
   );
+}
+
+function nextDay(iso: string): string {
+  const t = new Date(`${iso}T12:00:00Z`);
+  t.setUTCDate(t.getUTCDate() + 1);
+  return t.toISOString().slice(0, 10);
 }

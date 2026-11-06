@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, Landmark, PartyPopper, UserRound, Wallet } from "lucide-react";
+import { CalendarCheck, Eye, EyeOff, Landmark, PartyPopper, UserRound, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useStore } from "@/lib/client/store";
@@ -9,8 +9,9 @@ import { otherUser } from "@/lib/domain/types";
 import { Button } from "../ui/button";
 import { Input, Label } from "../ui/field";
 import { Sheet } from "../ui/sheet";
+import { useClosingActions } from "../ajustes/closing-card";
 
-type Step = "nome" | "renda" | "banco" | "pronto";
+type Step = "nome" | "inicio" | "renda" | "banco" | "pronto";
 
 /**
  * Primeiro acesso guiado (pensado para quem entra pela primeira vez, como a Patricia):
@@ -30,6 +31,8 @@ export function Onboarding() {
   const [income, setIncome] = useState("");
   const [show, setShow] = useState(false);
   const [closed, setClosed] = useState(false);
+  const [since, setSince] = useState(() => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date()));
+  const closing = useClosingActions();
   if (!needed || closed || !cfg) return null;
 
   const partner = cfg.users[otherUser(me)].name.split(" ")[0];
@@ -38,10 +41,16 @@ export function Onboarding() {
     setClosed(true);
     if (go) router.push(go);
   };
+  // Data de início (fechamento): é do casal, então só pergunta enquanto ninguém escolheu.
+  const askStart = !cfg.closing;
+  const afterStart: Step = hasIncome ? (hasBank ? "pronto" : "banco") : "renda";
+  const saveStart = async () => {
+    if (since && (await closing.close(since))) setStep(afterStart);
+  };
   const saveName = () => {
     const n = name.trim().slice(0, 140);
     if (n && n !== cfg.users[me].name) void updateConfig((c) => ({ ...c, users: { ...c.users, [me]: { ...c.users[me], name: n } } }));
-    setStep(hasIncome ? (hasBank ? "pronto" : "banco") : "renda");
+    setStep(askStart ? "inicio" : afterStart);
   };
   const saveIncome = () => {
     const c = parseMoneyToCents(income);
@@ -49,7 +58,7 @@ export function Onboarding() {
     setStep(hasBank ? "pronto" : "banco");
   };
 
-  const steps: Step[] = ["nome", ...(hasIncome ? [] : (["renda"] as Step[])), ...(hasBank ? [] : (["banco"] as Step[])), "pronto"];
+  const steps: Step[] = ["nome", ...(askStart || step === "inicio" ? (["inicio"] as Step[]) : []), ...(hasIncome ? [] : (["renda"] as Step[])), ...(hasBank ? [] : (["banco"] as Step[])), "pronto"];
   const idx = steps.indexOf(step);
 
   return (
@@ -72,6 +81,27 @@ export function Onboarding() {
           <Button className="w-full" onClick={saveName} disabled={!name.trim()}>
             Continuar
           </Button>
+        </div>
+      )}
+
+      {step === "inicio" && (
+        <div className="space-y-4">
+          <p className="flex items-start gap-2 text-sm text-zinc-600">
+            <CalendarCheck className="mt-0.5 size-4 shrink-0" /> Quando foi o último acerto de contas entre vocês? Tudo até esse dia (inclusive) fica fechado e o app passa a contar só o que vier depois.
+          </p>
+          <label className="block">
+            <Label>Último acerto feito em</Label>
+            <Input type="date" value={since} max={new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date())} onChange={(e) => setSince(e.target.value)} />
+          </label>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => setStep(afterStart)}>
+              Contar tudo
+            </Button>
+            <Button className="flex-1" onClick={() => void saveStart()} disabled={!since || closing.busy}>
+              Fechar até aqui
+            </Button>
+          </div>
+          <p className="text-xs text-zinc-500">Dá para mudar ou desfazer depois em Configurações → Fechamento por data.</p>
         </div>
       )}
 
