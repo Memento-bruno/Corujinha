@@ -102,6 +102,59 @@ Todas seguem as regras do app: somente leitura para dinheiro e sugestões por re
 7. **Lista de desejos compartilhada**: itens com preço e prioridade, e o app mostra em que mês cabe na meta.
 8. **Divisão pela renda, automática**: a divisão padrão se ajusta sozinha à proporção dos salários cadastrados.
 
+Mais ideias, da revisão de 06/11/2026 (sem repetir as de cima):
+
+9. **Alerta de cobrança estranha**: mesma loja e mesmo valor duas vezes no mesmo dia, ou valor muito acima do normal naquela loja.
+10. **Assinatura que subiu de preço** avisada no dia em que a cobrança chega (hoje só aparece em Metas).
+11. **Saldo do ano no acerto**: o histórico de meses fechados já existe; falta somar o ano e marcar "acerto feito" (só a marca, como o "Já paguei").
+12. **Reembolso de terceiros**: compra que um amigo ou a família vai devolver fica fora da conta do casal até voltar.
+13. **Gasto em dinheiro ou Pix** lançado rápido, que entra no acerto sem ser do cartão.
+14. **Etiquetas de evento** ("viagem Gramado", "casamento") para somar gastos de vários cartões.
+15. **Simular compra parcelada**: "um sofá em 10x de R$ 400" mostra como ficam os próximos meses e a meta.
+16. **Comparar com o mesmo mês do ano passado** (dezembro com dezembro).
+17. **Comprovante e garantia na compra**: foto guardada no Drive e lembrete "a garantia acaba em março".
+18. **Tema escuro** no app (hoje só a tela de carregamento tem).
+
+### O que eu faria primeiro
+
+1. **Corrigir os bugs B1 a B6** (logo abaixo), num PR só. Os números da tela Início ficam confiáveis.
+2. **Objetivos do casal** (2): o app passa de "para onde foi" para "para onde vai".
+3. **Alerta de cobrança estranha** (9): protege o dinheiro de vocês só com dados que já chegam do banco.
+4. **Retrospectiva do mês e do ano** (6): rápida, usa só o que já está salvo.
+5. **Notificação no celular** (1): avisos sem abrir o app nem configurar e-mail.
+
+Como adicionar cada um: uma conversa e um PR por recurso; tela nova passa primeiro pelo canvas de design para
+comentar; cada regra nova ganha teste em `apps/web/src/lib/engines`; nada muda nos dados salvos sem cópia antes.
+Depois de juntar, marcar o item aqui.
+
+## Bugs conhecidos (revisão de 06/11/2026)
+
+Conferido no código da `main` depois do PR #42: 148 testes e checagem de tipos passando, todas as telas abertas no
+computador e no celular sem erro no console, e leitura da lógica de contas, faturas, acerto, banco e lembretes.
+
+| # | Gravidade | O que acontece | Onde |
+| --- | --- | --- | --- |
+| B1 | Alta | **A fatura em aberto ignora as parcelas que já existem.** Enquanto o banco não traz nada do mês, o cartão conta R$ 0. O gráfico de evolução afunda justo no mês atual e o mês seguinte aparece maior. | `lib/engines/overview.ts` (`cardTxsFor`) |
+| B2 | Alta | **A nota de saúde fica alta demais por causa do B1.** "Parcelas futuras" mostra 0% e a nota "sobe" sem motivo (na demonstração: 100, "subiu 39 pontos"). | `lib/client/derived.ts` (`nextInstallments`) |
+| B3 | Média | **"Contas pagas em dia" ignora boletos e contas vencidas.** Com aluguel vencido e sem "Já paguei", continua 100%. Só olha as faturas de cartão do mês anterior. | `lib/engines/overview.ts` (`billsPaidRatio`) |
+| B4 | Média | **A compra feita à mão entra no mês que está na tela**, não na fatura da data escolhida. Se esse mês estiver fechado, dá erro e a tela recarrega. | `components/faturas/manual-purchase.tsx` |
+| B5 | Baixa | **Data errada à noite.** Depois das 21h, a compra feita à mão já vem com a data de amanhã, e "Hoje/Ontem" na lista de compras erra (usa o horário de Londres). | `manual-purchase.tsx`, `purchases.tsx` (`dayLabel`) |
+| B6 | Baixa | **A sincronização do banco vira o mês pelo horário de Londres.** No último dia do mês, depois das 21h, a janela de meses lida do banco anda um mês antes da hora. | `lib/integrations/pluggy-sync.ts` |
+| B7 | Privacidade | **O salário do outro chega no celular** junto com os dados do app, mesmo sem aparecer na tela. A regra era "só porcentagem". | `app/api/state/route.ts` |
+
+Os bugs que vocês acharam usando o app de verdade (Pluggy, Drive) devem aparecer em **Configurações → Erros do app**;
+os que não geram erro (número errado, tela estranha) precisam de um print com o nome da tela.
+
+## Antes de usar no dia a dia (fora do checklist do app)
+
+O cartão **Pronto para o casal** cobre login, Drive, bancos, cópia e lembretes. Fica de fora:
+
+- [ ] **Guardar o `ENCRYPTION_SECRET`** num gerenciador de senhas. Sem ele, os dados do Drive ficam ilegíveis para sempre.
+- [ ] **Trocar a chave secreta da Pluggy e o token do Drive**, que passaram pelo chat no começo.
+- [ ] Apagar o protótipo antigo (`apps/mobile`, `apps/api`, `db/`), que não é usado.
+- [ ] O repositório está **público** (para o GitHub Actions ser grátis). Não há senhas no código, mas dá para deixar
+      privado se preferirem.
+
 ## Segurança (resumo)
 
 - Somente 2 contas Google conseguem entrar; toda rota de API revalida a sessão no servidor.
