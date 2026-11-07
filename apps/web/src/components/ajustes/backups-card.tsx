@@ -15,6 +15,7 @@ interface BackupInfo {
 
 const REASONS: Record<string, string> = {
   manual: "Feita por vocês",
+  automatica: "Automática da semana",
   "antes-de-apagar-compras-do-banco": "Antes de apagar as compras do banco",
   "antes-de-desconectar-banco": "Antes de desconectar um banco",
   "antes-de-restaurar": "Antes de restaurar uma cópia",
@@ -76,7 +77,7 @@ export function BackupsCard() {
     <Card id="copias">
       <CardHeader icon={<IconBox><History /></IconBox>} title="Cópias de segurança" subtitle="Guardadas criptografadas na pasta do Drive" />
       <p className="mb-3 text-xs text-zinc-500">
-        O app faz uma cópia sozinho antes de apagar ou desconectar compras do banco. Ficam as 15 mais recentes.
+        O app faz uma cópia sozinho toda semana e antes de apagar ou desconectar compras do banco. Ficam as 15 mais recentes.
       </p>
       {list === null ? (
         <p className="flex items-center gap-2 text-sm text-zinc-500"><Loader2 className="size-4 animate-spin" /> Carregando…</p>

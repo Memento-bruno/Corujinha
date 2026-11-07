@@ -3,6 +3,7 @@
 import { Loader2, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavZoom } from "@/lib/client/use-desktop-viewport";
+import { reportError } from "@/lib/client/report-error";
 import { AppProvider, useStore } from "@/lib/client/store";
 import { BottomNav } from "./bottom-nav";
 import { Header } from "./header";
@@ -77,6 +78,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
+    // Erro inesperado em qualquer tela vai para Ajustes → Erros do app.
+    const onError = (e: ErrorEvent) => reportError(e.error ?? e.message);
+    const onRejection = (e: PromiseRejectionEvent) => reportError(e.reason);
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
   }, []);
   return (
     <AppProvider>

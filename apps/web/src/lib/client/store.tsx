@@ -27,6 +27,12 @@ export interface AppState {
     pluggyConfigured: boolean;
     /** Lembretes por e-mail ligados no servidor (CRON_SECRET + RESEND_API_KEY). */
     remindersConfigured?: boolean;
+    /** Os dois e-mails autorizados (ALLOWED_USER_EMAIL_1 e _2) estão definidos. */
+    bothUsersAllowed?: boolean;
+    /** Cópia de segurança semanal ligada (CRON_SECRET). */
+    autoBackupConfigured?: boolean;
+    /** Webhook da Pluggy ligado (PLUGGY_WEBHOOK_SECRET). */
+    webhookConfigured?: boolean;
     /** Chaves da Pluggy existem, mas o app está público sem login: bloqueado. */
     pluggyNeedsLogin?: boolean;
   };
