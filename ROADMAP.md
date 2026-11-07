@@ -140,7 +140,7 @@ computador e no celular sem erro no console, e leitura da lógica de contas, fat
 | B4 | Média | **A compra feita à mão entra no mês que está na tela**, não na fatura da data escolhida. Se esse mês estiver fechado, dá erro e a tela recarrega. | `components/faturas/manual-purchase.tsx` |
 | B5 | Baixa | **Data errada à noite.** Depois das 21h, a compra feita à mão já vem com a data de amanhã, e "Hoje/Ontem" na lista de compras erra (usa o horário de Londres). | `manual-purchase.tsx`, `purchases.tsx` (`dayLabel`) |
 | B6 | Baixa | **A sincronização do banco vira o mês pelo horário de Londres.** No último dia do mês, depois das 21h, a janela de meses lida do banco anda um mês antes da hora. | `lib/integrations/pluggy-sync.ts` |
-| B7 | Privacidade | **O salário do outro chega no celular** junto com os dados do app, mesmo sem aparecer na tela. A regra era "só porcentagem". | `app/api/state/route.ts` |
+| B7 | Decidido: fica assim | O salário do outro chega no celular junto com os dados do app, sem aparecer na tela. Esconder não protege de verdade: a porcentagem da renda de cada um já permite calcular o valor. | `app/api/state/route.ts` |
 
 Os bugs que vocês acharam usando o app de verdade (Pluggy, Drive) devem aparecer em **Configurações → Erros do app**;
 os que não geram erro (número errado, tela estranha) precisam de um print com o nome da tela.
