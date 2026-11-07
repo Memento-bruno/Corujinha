@@ -71,10 +71,11 @@ interface Store {
   view: ViewFilter;
   setView: (v: ViewFilter) => void;
   reload: () => Promise<void>;
-  updateStatement: (month: MonthKey, fn: (s: StatementFile) => StatementFile) => Promise<void>;
+  /** Resolve true se salvou; false se não salvou (bloqueado pelos valores fictícios ou erro, já avisado). */
+  updateStatement: (month: MonthKey, fn: (s: StatementFile) => StatementFile) => Promise<boolean>;
   /** Resolve true se salvou; false se deu erro (o erro já aparece num aviso). */
   updateConfig: (fn: (c: HouseholdConfig) => HouseholdConfig) => Promise<boolean>;
-  updateRecurring: (fn: (r: RecurringDebtsFile) => RecurringDebtsFile) => Promise<void>;
+  updateRecurring: (fn: (r: RecurringDebtsFile) => RecurringDebtsFile) => Promise<boolean>;
   closeMonth: (month: MonthKey, reopen?: boolean) => Promise<void>;
   /** Busca as faturas no Open Finance (Meu Pluggy). `silent` não mostra aviso quando nada mudou. */
   syncBank: (opts?: { silent?: boolean }) => Promise<void>;
@@ -508,8 +509,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const next = fn(s);
         return fakeRef.current ? { ...next, transactions: restoreAmounts(seedRef.current, s.transactions, next.transactions) } : next;
       };
-      if (blockedByFake(slot, safe, (a, b) => changesAmounts(a.transactions, b.transactions))) return;
-      await save(slot, safe);
+      if (blockedByFake(slot, safe, (a, b) => changesAmounts(a.transactions, b.transactions))) return false;
+      return save(slot, safe);
     },
     [save, blockedByFake],
   );
@@ -528,8 +529,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const next = fn(r);
         return fakeRef.current ? { ...next, debts: restoreAmounts(seedRef.current, r.debts, next.debts) } : next;
       };
-      if (blockedByFake(recurringSlot, safe, (a, b) => changesAmounts(a.debts, b.debts))) return;
-      await save(recurringSlot, safe);
+      if (blockedByFake(recurringSlot, safe, (a, b) => changesAmounts(a.debts, b.debts))) return false;
+      return save(recurringSlot, safe);
     },
     [save, blockedByFake],
   );

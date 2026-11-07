@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RecurringDebt, Transaction } from "../domain/types";
-import { billsPaidRatio, cardTxsFor, financialHealth, incomeUsage, monthComposition, monthSpend } from "./overview";
+import { billsPaidRatio, cardTxsFor, financialHealth, incomeUsage, monthComposition, monthSpend, onTimeRatio } from "./overview";
+import { addDays, currentMonthBR, todayBR } from "../domain/months";
 
 const aluguel: RecurringDebt = {
   id: "rec-aluguel",
@@ -70,5 +71,35 @@ describe("visão geral", () => {
     expect(h.worst?.key).toBe("meta");
     expect(billsPaidRatio({ a: { total: 1000, paid: 500, status: "parcial" } })).toBe(0.5);
     expect(billsPaidRatio(undefined)).toBe(1);
+  });
+});
+
+describe("correções da revisão de bugs", () => {
+  it("fatura em aberto sem compras do banco ainda conta as parcelas que já existem", () => {
+    const byMonth = { "2026-11": [tx({ id: "tv", amount: 50000, installment: { current: 2, total: 4 } })], "2026-12": [] };
+    expect(cardTxsFor(byMonth, [], "2026-12", "2026-12").map((t) => t.installment)).toEqual([{ current: 3, total: 4 }]);
+    // Mês que já passou fica como está.
+    expect(cardTxsFor({ "2026-10": [] , "2026-09": byMonth["2026-11"] }, [], "2026-10", "2026-12")).toEqual([]);
+    // Com compra real do banco, vale o que chegou.
+    const real = { ...byMonth, "2026-12": [tx({ id: "pizza" })] };
+    expect(cardTxsFor(real, [], "2026-12", "2026-12").map((t) => t.id)).toEqual(["pizza"]);
+  });
+
+  it("conta vencida sem 'Já paguei' derruba 'Contas pagas em dia'", () => {
+    const base = { bankBillsMonth: "2026-11", debts: [aluguel], month: "2026-12" };
+    expect(onTimeRatio({ ...base, today: "2026-12-04" })).toBe(1); // ainda não venceu
+    expect(onTimeRatio({ ...base, today: "2026-12-10" })).toBe(0);
+    expect(onTimeRatio({ ...base, debts: [{ ...aluguel, paidMonths: ["2026-12"] }], today: "2026-12-10" })).toBe(1);
+    // Fatura marcada como paga no app conta como paga.
+    const bankBills = { "card-a": { total: 1000, paid: 0, status: "em aberto" as const } };
+    expect(onTimeRatio({ ...base, debts: [], bankBills, today: "2026-12-10" })).toBe(0);
+    expect(onTimeRatio({ ...base, debts: [], bankBills, paidCardBills: ["card-a|2026-11"], today: "2026-12-10" })).toBe(1);
+  });
+
+  it("vira o dia e o mês pelo horário de Brasília", () => {
+    const night = new Date("2026-11-30T23:30:00-03:00"); // 02:30 de 01/12 em UTC
+    expect(todayBR(night)).toBe("2026-11-30");
+    expect(currentMonthBR(night)).toBe("2026-11");
+    expect(addDays("2026-12-31", 1)).toBe("2027-01-01");
   });
 });

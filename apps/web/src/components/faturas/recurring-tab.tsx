@@ -124,9 +124,13 @@ export function RecurringTab() {
 }
 
 /** Formulário de conta (boleto, fixa, compra recorrente no cartão) num sheet. Salva e apaga sozinho. */
-export function DebtSheet({ editing, onClose }: { editing: RecurringDebt | null; onClose: () => void }) {
+export function DebtSheet({ editing: asked, onClose }: { editing: RecurringDebt | null; onClose: () => void }) {
   const { state, updateRecurring, toast } = useStore();
   const debts = state!.recurring.data.debts;
+  // Sempre edita a conta como está gravada. As telas do Início mostram uma cópia ajustada ao
+  // fechamento por data (começo e parcelas recalculados só para as contas): salvar essa cópia
+  // estragaria o cadastro.
+  const editing = asked ? (debts.find((x) => x.id === asked.id) ?? asked) : null;
   const isNew = !!editing && !debts.some((x) => x.id === editing.id);
   const save = (debt: RecurringDebt) => {
     void updateRecurring((r) => {
@@ -135,9 +139,8 @@ export function DebtSheet({ editing, onClose }: { editing: RecurringDebt | null;
         ...r,
         debts: exists ? r.debts.map((x) => (x.id === debt.id ? debt : x)) : [...r.debts, debt],
       };
-    });
+    }).then((ok) => ok && toast("Conta salva.", "success"));
     onClose();
-    toast("Conta salva.", "success");
   };
   return (
     <Sheet
@@ -152,9 +155,11 @@ export function DebtSheet({ editing, onClose }: { editing: RecurringDebt | null;
     >
       {editing && (
         <DebtForm
+          key={editing.id}
           initial={editing}
           onSave={save}
           onDelete={() => {
+            if (!isNew && !window.confirm(`Apagar a conta "${editing.description}"? Ela some de todos os meses.`)) return;
             void updateRecurring((r) => ({
               ...r,
               debts: r.debts.filter((x) => x.id !== editing.id),

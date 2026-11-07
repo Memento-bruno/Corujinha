@@ -1,5 +1,5 @@
 import "server-only";
-import { addMonths, monthOf } from "../domain/months";
+import { addMonths, currentMonthBR } from "../domain/months";
 import { cutoffMonth, isLockedTx } from "../domain/closing";
 import type { BankBill, HouseholdConfig, MonthKey, Transaction } from "../domain/types";
 import { applyMerchantRule, flagForReview } from "../engines/merchants";
@@ -40,7 +40,7 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
   }
   // Uma fatura junta compras de até ~2 meses antes do vencimento: buscamos com folga
   // e só gravamos os meses dentro da janela, para o mês mais antigo não vir pela metade.
-  const firstMonth = addMonths(monthOf(new Date()), -monthsBack);
+  const firstMonth = addMonths(currentMonthBR(), -monthsBack);
   // Parcelas de compras antigas vêm com a data da compra original: buscamos 2 anos para trás.
   const from = `${addMonths(firstMonth, -24)}-01`;
   const byMonth = new Map<MonthKey, Transaction[]>();
@@ -106,7 +106,7 @@ export async function syncPluggy(db: DriveDatabaseService, monthsBack = 3): Prom
     };
   });
   // Passa por todos os meses da janela (inclusive os que ficaram vazios), até 2 meses à frente.
-  const lastMonth = addMonths(monthOf(new Date()), 2);
+  const lastMonth = addMonths(currentMonthBR(), 2);
   const months = new Set<MonthKey>([...byMonth.keys(), ...billsByMonth.keys()]);
   for (let m = firstMonth; m <= lastMonth; m = addMonths(m, 1)) months.add(m);
   // E os meses já salvos (ex.: parcelas previstas lá na frente), para limpar o que mudou.

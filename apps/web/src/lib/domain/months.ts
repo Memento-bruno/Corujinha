@@ -10,6 +10,23 @@ export function monthOf(date: Date): MonthKey {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+const BR_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** Dia de hoje no horário de Brasília ("YYYY-MM-DD"). Servidor e celular usam o mesmo relógio. */
+export function todayBR(now: Date = new Date()): string {
+  return BR_DAY.format(now);
+}
+
+/** Mês de hoje no horário de Brasília. */
+export function currentMonthBR(now: Date = new Date()): MonthKey {
+  return todayBR(now).slice(0, 7);
+}
+
+/** Soma dias a uma data "YYYY-MM-DD". */
+export function addDays(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T12:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+}
+
 export function addMonths(month: MonthKey, delta: number): MonthKey {
   const [y, m] = month.split("-").map(Number);
   const idx = y * 12 + (m - 1) + delta;
