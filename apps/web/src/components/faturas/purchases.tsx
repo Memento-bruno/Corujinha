@@ -12,6 +12,7 @@ import { isSamePurchase } from "@/lib/engines/installments";
 import { cardRecurringFor } from "@/lib/engines/recurring";
 import { cn } from "@/lib/utils";
 import { closingLabel } from "@/lib/domain/closing";
+import { addDays, todayBR } from "@/lib/domain/months";
 import { PERSON } from "../home/colors";
 import { MerchantLogo } from "../home/merchant-logo";
 import { Switch } from "../ui/switch";
@@ -23,8 +24,8 @@ type Sort = "recent" | "high" | "low";
 const WEEKDAY = new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: "UTC" });
 
 function dayLabel(date: string): string {
-  const today = new Date().toISOString().slice(0, 10);
-  const yest = new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+  const today = todayBR();
+  const yest = addDays(today, -1);
   const wd = WEEKDAY.format(new Date(`${date}T12:00:00Z`)).replace("-feira", "");
   const dm = `${date.slice(8, 10)}/${date.slice(5, 7)}`;
   const pre = date === today ? "Hoje, " : date === yest ? "Ontem, " : "";
@@ -255,6 +256,7 @@ export function Purchases({ txs, closed, cardName, onClearCard }: { txs: Transac
       syncRecurring(t, false);
       toast("Não vai mais ser prevista.");
     } else {
+      if (!window.confirm(`Remover a compra "${t.description}"?`)) return;
       void updateStatement(d.month, (s) => ({ ...s, transactions: s.transactions.filter((x) => x.id !== t.id) }));
       toast("Compra removida.");
     }

@@ -7,6 +7,7 @@ import { api, useStore } from "@/lib/client/store";
 import { CATEGORIES } from "@/lib/domain/categories";
 import { formatBRL, parseMoneyToCents } from "@/lib/domain/money";
 import { cardGroups } from "@/lib/domain/card-groups";
+import { monthLabel } from "@/lib/domain/months";
 import { ownerSplit, type CardBrand, type CategoryId, type CreditCard, type HouseholdConfig, type Split, type Transaction, type UserId } from "@/lib/domain/types";
 import { CreditCardVisual } from "../home/credit-card";
 import { Button } from "../ui/button";
@@ -222,7 +223,7 @@ function CardSplitSelect({ card, label }: { card: CreditCard; label: string }) {
       // Compras deste cartão nos meses ainda abertos que estavam com a divisão antiga do cartão passam para a nova.
       const hit = (t: Transaction) => t.cardId === card.id && t.split.type === before.type;
       let changed = 0;
-      const saves: Promise<void>[] = [];
+      const saves: Promise<boolean>[] = [];
       for (const [m, f] of Object.entries(state!.statements)) {
         if (f.data.snapshot) continue;
         const hits = f.data.transactions.filter(hit).length;
@@ -366,11 +367,18 @@ export function AjustesView({ signOutAction }: { signOutAction: () => Promise<vo
               <button
                 className="mt-1.5 inline-flex items-center gap-1 px-1 text-xs font-semibold text-rose-600"
                 onClick={() => {
-                  if (d.allTxs.some((t) => t.cardId === c.id)) {
-                    toast("Este cartão tem transações no mês; remova-as antes.", "error");
+                  // O cartão e os virtuais/adicionais dele (mesma fatura).
+                  const ids = new Set([c.id, ...children.map((v) => v.id)]);
+                  const used = Object.entries(state!.statements)
+                    .filter(([, f]) => f.data.transactions.some((t) => ids.has(t.cardId)))
+                    .map(([m]) => m)
+                    .sort();
+                  if (used.length) {
+                    toast(`Este cartão tem compras em ${used.length === 1 ? "um mês" : `${used.length} meses`} (${used.map((m) => monthLabel(m)).join(", ")}). Remova as compras antes.`, "error");
                     return;
                   }
-                  set((x) => ({ ...x, cards: x.cards.filter((y) => y.id !== c.id) }));
+                  if (!window.confirm(`Remover o cartão ${c.nickname} •${c.last4}?`)) return;
+                  set((x) => ({ ...x, cards: x.cards.filter((y) => !ids.has(y.id)) }));
                 }}
               >
                 <Trash2 className="size-3.5" /> Remover

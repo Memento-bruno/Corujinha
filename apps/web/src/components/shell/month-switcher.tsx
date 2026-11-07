@@ -2,13 +2,8 @@
 
 import { ChevronDown, ChevronLeft, ChevronRight, Lock } from "lucide-react";
 import { useStore } from "@/lib/client/store";
-import { addMonths, monthLabel } from "@/lib/domain/months";
+import { addMonths, currentMonthBR as currentMonth, monthLabel } from "@/lib/domain/months";
 import type { MonthKey, StatementFile } from "@/lib/domain/types";
-
-function currentMonth(): MonthKey {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
 
 /** Situação da fatura do mês pelo que o banco informou (Open Finance). */
 export function billStatus(file: StatementFile | undefined, month: MonthKey): { label: string; tone: string } | null {

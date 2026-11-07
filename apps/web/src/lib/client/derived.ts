@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { addMonths, monthRange } from "../domain/months";
+import { addMonths, monthRange, todayBR } from "../domain/months";
 import { formatBRL, formatPct, formatSci, pctOf } from "../domain/money";
 import type { Cents, MonthKey, Transaction, UserId } from "../domain/types";
 import {
@@ -18,12 +18,12 @@ import { RuleBasedSavingsEngine, cardRecurringMerchants, repeatedMerchants } fro
 import { withPredicted } from "../engines/recurring";
 import { recurringToExpenses, settleMonth, splitAmount } from "../engines/settlement";
 import {
-  billsPaidRatio,
   cardTxsFor,
   financialHealth,
   incomeUsage,
   monthComposition,
   monthSpend,
+  onTimeRatio,
 } from "../engines/overview";
 import { useStore } from "./store";
 import { debtsAfterClosing, isLockedTx } from "../domain/closing";
@@ -162,12 +162,21 @@ function useDerivedOptional() {
         goal: cfg.monthlyGoal,
         income: income.totalIncome,
         futureInstallments: futureInst,
-        paidRatio: billsPaidRatio(statements[addMonths(m, -1)]?.data.bankBills),
+        paidRatio: onTimeRatio({
+          bankBills: statements[addMonths(m, -1)]?.data.bankBills,
+          bankBillsMonth: addMonths(m, -1),
+          paidCardBills: cfg.paidCardBills,
+          debts,
+          month: m,
+          today: todayBR(),
+        }),
       });
-    const nextInstallments = projectInstallments(allTxs, month, 1)[0]?.total ?? 0;
+    // Parcelas já contratadas para o mês seguinte. Na fatura em aberto que o banco ainda não trouxe,
+    // vale a previsão (parcelas que já existem), não a lista vazia.
+    const nextInstallments = projectInstallments(cardOf(month), month, 1)[0]?.total ?? 0;
     const prevSpend = coupleSpendOf(prevMonth);
     const coupleSpend = coupleSpendOf(month);
-    const prevInstallments = projectInstallments(byMonth[prevMonth] ?? [], prevMonth, 1)[0]?.total ?? 0;
+    const prevInstallments = projectInstallments(cardOf(prevMonth), prevMonth, 1)[0]?.total ?? 0;
     const finHealth = healthOf(month, coupleSpend.total, nextInstallments);
     const prevFinHealth = prevSpend.status === "empty" ? null : healthOf(prevMonth, prevSpend.total, prevInstallments);
     const engine = new RuleBasedSavingsEngine({ month, byMonth, config: cfg });

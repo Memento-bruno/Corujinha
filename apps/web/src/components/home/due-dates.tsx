@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useDerived, useFmt } from "@/lib/client/derived";
 import { useStore } from "@/lib/client/store";
 import type { Cents, RecurringDebt } from "@/lib/domain/types";
-import { cardBillKey } from "@/lib/engines/card-bills";
+import { billInClosing, cardBillKey } from "@/lib/engines/card-bills";
 import { isDebtActiveIn } from "@/lib/engines/settlement";
 import { cn } from "@/lib/utils";
 import { DebtSheet, newDebt } from "../faturas/recurring-tab";
@@ -58,6 +58,8 @@ export function DueDates() {
     const sameMonth = b.dueDate.slice(0, 7) === d.month;
     const k = cardBillKey(cardId, d.month);
     const bankPaid = b.status === "paga";
+    // Venceu até a data do fechamento: já foi acertada (igual em "Faturas pagas").
+    if (!bankPaid && billInClosing(d.month, b.dueDate, d.closing)) return [];
     return [
       {
         key: `card-${cardId}`,

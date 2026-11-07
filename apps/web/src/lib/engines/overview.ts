@@ -32,8 +32,9 @@ export function projectedInstallmentTxs(baseTxs: Transaction[], baseMonth: Month
 }
 
 /**
- * Compras de cartão de um mês. Mês que o banco ainda não trouxe (depois da fatura em aberto)
- * é previsto: parcelas que já existem + compras que se repetem todo mês.
+ * Compras de cartão de um mês. Mês que o banco ainda não trouxe (a fatura em aberto antes da
+ * primeira compra chegar, ou os meses depois dela) é previsto: parcelas que já existem + compras
+ * que se repetem todo mês. Meses que já passaram ficam como estão.
  */
 export function cardTxsFor(
   byMonth: Record<MonthKey, Transaction[]>,
@@ -42,7 +43,7 @@ export function cardTxsFor(
   openMonth: MonthKey,
 ): Transaction[] {
   const known = byMonth[month];
-  if (known?.some((t) => !t.predictedFrom) || month <= openMonth) return known ?? withPredicted(debts, month, []);
+  if (known?.some((t) => !t.predictedFrom) || month < openMonth) return known ?? withPredicted(debts, month, []);
   // Base da previsão: o último mês até aqui que tem compras reais.
   let base: MonthKey | null = null;
   for (let i = 1; i <= 12 && !base; i++) {
@@ -166,6 +167,44 @@ export function billsPaidRatio(bills: Record<string, BankBill> | undefined): num
   if (!list.length || total <= 0) return 1;
   if (list.every((b) => b.status === "paga")) return 1;
   return Math.min(1, list.reduce((s, b) => s + Math.max(0, b.paid), 0) / total);
+}
+
+/**
+ * "Contas pagas em dia": soma, pelo valor, as faturas de cartão do mês anterior (pelo banco ou pela
+ * marca "Já paguei") e as contas fora do cartão do mês que já venceram. Conta que venceu e não foi
+ * marcada como paga puxa o número para baixo. Sem nada vencido, conta como em dia.
+ */
+export function onTimeRatio(input: {
+  /** Faturas do banco do mês anterior (as que vencem neste mês). */
+  bankBills?: Record<string, BankBill>;
+  bankBillsMonth: MonthKey;
+  /** Marcas "Já paguei" das faturas ("cartão|mês"). */
+  paidCardBills?: string[];
+  debts: RecurringDebt[];
+  month: MonthKey;
+  /** Hoje ("YYYY-MM-DD", horário de Brasília). */
+  today: string;
+}): number {
+  const marks = new Set(input.paidCardBills ?? []);
+  let due = 0;
+  let paid = 0;
+  for (const [cardId, b] of Object.entries(input.bankBills ?? {})) {
+    const total = Math.max(0, b.total);
+    if (!total) continue;
+    due += total;
+    paid += b.status === "paga" || marks.has(`${cardId}|${input.bankBillsMonth}`) ? total : Math.min(total, Math.max(0, b.paid));
+  }
+  const [y, m] = input.month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  for (const e of recurringToExpenses(input.debts, input.month)) {
+    const d = input.debts.find((x) => `recurring:${x.id}` === e.id);
+    if (!d || e.amount <= 0) continue;
+    const dueDate = `${input.month}-${String(Math.min(d.dueDay, lastDay)).padStart(2, "0")}`;
+    if (dueDate >= input.today) continue; // ainda não venceu
+    due += e.amount;
+    if (d.paidMonths?.includes(input.month)) paid += e.amount;
+  }
+  return due > 0 ? Math.min(1, paid / due) : 1;
 }
 
 export function financialHealth(input: {

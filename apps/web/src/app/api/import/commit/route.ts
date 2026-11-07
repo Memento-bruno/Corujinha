@@ -51,7 +51,8 @@ export async function POST(req: Request) {
           category: rule?.category ?? category,
           tags: (rule?.category ?? category) === "assinaturas" || config.subscriptionMerchants.includes(merchantKey) ? ["Assinatura"] : [],
           // Compra de cartão é do dono da fatura; só fica dividida se o casal marcou a loja como dividida.
-          split: isSharedSplit(rule?.split) ? rule!.split! : ownerSplit(card.owner),
+          // A divisão escolhida no próprio cartão (Configurações) vale mais, como nas compras do banco.
+          split: card.defaultSplit ?? (isSharedSplit(rule?.split) ? rule!.split! : ownerSplit(card.owner)),
           installment: row.installment,
           source: body.source,
           ...(rule ? {} : { toReview: true }),
